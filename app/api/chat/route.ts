@@ -45,7 +45,10 @@ export async function POST(req: Request) {
     );
   }
 
-  const { provider, modelName } = getProviderAndModel(providerId, resolvedApiKey);
+  const { provider, modelName } = getProviderAndModel(
+    providerId,
+    resolvedApiKey,
+  );
   const finalSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
 
   const baseOptions = {

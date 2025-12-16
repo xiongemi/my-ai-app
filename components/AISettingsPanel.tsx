@@ -13,6 +13,11 @@ export const providers = [
   },
   { id: "deepseek", name: "DeepSeek", model: "deepseek-chat" },
   { id: "qwen", name: "Qwen (Alibaba)", model: "qwen-plus" },
+  {
+    id: "vercel-ai-gateway",
+    name: "Vercel AI Gateway",
+    model: "openai/gpt-4o",
+  },
 ];
 
 export interface UsageInfo {

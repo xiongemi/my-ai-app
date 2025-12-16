@@ -35,6 +35,16 @@ export const providerConfigs = {
       }),
     defaultModel: "qwen-plus",
   },
+  // Vercel AI Gateway - routes to multiple providers through unified API
+  "vercel-ai-gateway": {
+    createProvider: (apiKey: string) =>
+      createOpenAI({
+        apiKey,
+        baseURL: "https://ai-gateway.vercel.sh/v1",
+      }),
+    // Format: provider/model - can use any model from supported providers
+    defaultModel: "openai/gpt-4o",
+  },
 };
 
 export type ProviderId = keyof typeof providerConfigs;
@@ -46,6 +56,7 @@ const envKeyMapping: Record<ProviderId, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   deepseek: "DEEPSEEK_API_KEY",
   qwen: "QWEN_API_KEY",
+  "vercel-ai-gateway": "VERCEL_AI_GATEWAY_API_KEY",
 };
 
 export function getEnvApiKey(providerId: ProviderId): string | undefined {
@@ -86,4 +97,3 @@ export function resolveApiKey(
 ): string | undefined {
   return requestApiKey || getEnvApiKey(providerId);
 }
-
