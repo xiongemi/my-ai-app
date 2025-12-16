@@ -1,4 +1,4 @@
-import { CoreMessage, streamText, generateText } from "ai";
+import { ModelMessage, streamText, generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -85,7 +85,7 @@ export async function POST(req: Request) {
     apiKey,
     stream = true, // Default to streaming
   }: {
-    messages: CoreMessage[];
+    messages: ModelMessage[];
     provider?: ProviderId;
     apiKey?: string;
     stream?: boolean;

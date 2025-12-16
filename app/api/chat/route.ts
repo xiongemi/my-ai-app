@@ -1,4 +1,4 @@
-import { CoreMessage, streamText, generateText } from "ai";
+import { ModelMessage, streamText, generateText } from "ai";
 import { NextResponse } from "next/server";
 import {
   providerConfigs,
@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     systemPrompt, // Custom system prompt
     enableTools = false, // Whether to enable file reading tools
   }: {
-    messages: CoreMessage[];
+    messages: ModelMessage[];
     provider?: ProviderId;
     apiKey?: string;
     stream?: boolean;
