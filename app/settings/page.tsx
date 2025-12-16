@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
-import { Eye, EyeOff, Save, ArrowLeft, Sparkles } from "lucide-react";
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { Eye, EyeOff, Save, ArrowLeft, Sparkles } from 'lucide-react';
 
 interface ApiKeyConfig {
   id: string;
@@ -12,16 +12,16 @@ interface ApiKeyConfig {
 }
 
 const defaultProviders: ApiKeyConfig[] = [
-  { id: "openai", name: "OpenAI", placeholder: "sk-...", key: "" },
-  { id: "gemini", name: "Google Gemini", placeholder: "AIza...", key: "" },
-  { id: "deepseek", name: "DeepSeek", placeholder: "sk-...", key: "" },
-  { id: "anthropic", name: "Anthropic", placeholder: "sk-ant-...", key: "" },
-  { id: "qwen", name: "Qwen (Alibaba)", placeholder: "sk-...", key: "" },
+  { id: 'openai', name: 'OpenAI', placeholder: 'sk-...', key: '' },
+  { id: 'gemini', name: 'Google Gemini', placeholder: 'AIza...', key: '' },
+  { id: 'deepseek', name: 'DeepSeek', placeholder: 'sk-...', key: '' },
+  { id: 'anthropic', name: 'Anthropic', placeholder: 'sk-ant-...', key: '' },
+  { id: 'qwen', name: 'Qwen (Alibaba)', placeholder: 'sk-...', key: '' },
   {
-    id: "vercel-ai-gateway",
-    name: "Vercel AI Gateway",
-    placeholder: "vag_...",
-    key: "",
+    id: 'vercel-ai-gateway',
+    name: 'Vercel AI Gateway',
+    placeholder: 'vag_...',
+    key: '',
   },
 ];
 
@@ -32,18 +32,18 @@ export default function SettingsPage() {
 
   useEffect(() => {
     // Load saved keys from localStorage
-    const savedKeys = localStorage.getItem("ai-api-keys");
+    const savedKeys = localStorage.getItem('ai-api-keys');
     if (savedKeys) {
       try {
         const parsed = JSON.parse(savedKeys);
         setProviders((prev) =>
           prev.map((p) => ({
             ...p,
-            key: parsed[p.id] || "",
+            key: parsed[p.id] || '',
           })),
         );
       } catch (e) {
-        console.error("Failed to parse saved keys", e);
+        console.error('Failed to parse saved keys', e);
       }
     }
   }, []);
@@ -64,7 +64,7 @@ export default function SettingsPage() {
       (acc, p) => ({ ...acc, [p.id]: p.key }),
       {},
     );
-    localStorage.setItem("ai-api-keys", JSON.stringify(keysToSave));
+    localStorage.setItem('ai-api-keys', JSON.stringify(keysToSave));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -109,7 +109,7 @@ export default function SettingsPage() {
                 <div className="relative flex items-center">
                   <input
                     id={provider.id}
-                    type={visibleKeys[provider.id] ? "text" : "password"}
+                    type={visibleKeys[provider.id] ? 'text' : 'password'}
                     value={provider.key}
                     onChange={(e) => updateKey(provider.id, e.target.value)}
                     placeholder={provider.placeholder}
@@ -136,7 +136,7 @@ export default function SettingsPage() {
             className="flex items-center justify-center gap-2 w-full sm:w-fit px-6 py-3 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
           >
             <Save size={16} />
-            {saved ? "Saved!" : "Save API Keys"}
+            {saved ? 'Saved!' : 'Save API Keys'}
           </button>
 
           <p className="text-xs text-zinc-500 dark:text-zinc-500">

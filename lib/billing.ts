@@ -3,23 +3,23 @@
 // Using in-memory storage - will reset on server restart.
 
 export const modelCosts: Record<string, { input: number; output: number }> = {
-  "gpt-4o": {
+  'gpt-4o': {
     input: 0.005 / 1000, // Cost per 1000 tokens
     output: 0.015 / 1000, // Cost per 1000 tokens
   },
-  "gemini-1.5-pro": {
+  'gemini-1.5-pro': {
     input: 0.00125 / 1000,
     output: 0.005 / 1000,
   },
-  "claude-sonnet-4-20250514": {
+  'claude-sonnet-4-20250514': {
     input: 0.003 / 1000,
     output: 0.015 / 1000,
   },
-  "deepseek-chat": {
+  'deepseek-chat': {
     input: 0.00014 / 1000,
     output: 0.00028 / 1000,
   },
-  "qwen-plus": {
+  'qwen-plus': {
     input: 0.0008 / 1000,
     output: 0.002 / 1000,
   },
@@ -42,7 +42,7 @@ export function deductCredits(
   promptTokens: number,
   completionTokens: number,
 ): { cost: number; remaining: number } {
-  const costs = modelCosts[model] || modelCosts["gpt-4o"];
+  const costs = modelCosts[model] || modelCosts['gpt-4o'];
   const cost = promptTokens * costs.input + completionTokens * costs.output;
   userCredits -= cost;
 

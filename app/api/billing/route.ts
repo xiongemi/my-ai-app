@@ -1,5 +1,5 @@
-import { getCredits } from "@/lib/billing";
-import { NextResponse } from "next/server";
+import { getCredits } from '@/lib/billing';
+import { NextResponse } from 'next/server';
 
 export function GET() {
   const credits = getCredits();

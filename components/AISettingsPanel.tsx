@@ -1,22 +1,22 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { ChevronDown, Zap, Clock } from "lucide-react";
+import { useState, useEffect } from 'react';
+import { ChevronDown, Zap, Clock } from 'lucide-react';
 
 export const providers = [
-  { id: "openai", name: "OpenAI (GPT-4o)", model: "gpt-4o" },
-  { id: "gemini", name: "Google Gemini", model: "gemini-1.5-pro" },
+  { id: 'openai', name: 'OpenAI (GPT-4o)', model: 'gpt-4o' },
+  { id: 'gemini', name: 'Google Gemini', model: 'gemini-1.5-pro' },
   {
-    id: "anthropic",
-    name: "Anthropic (Claude)",
-    model: "claude-sonnet-4-20250514",
+    id: 'anthropic',
+    name: 'Anthropic (Claude)',
+    model: 'claude-sonnet-4-20250514',
   },
-  { id: "deepseek", name: "DeepSeek", model: "deepseek-chat" },
-  { id: "qwen", name: "Qwen (Alibaba)", model: "qwen-plus" },
+  { id: 'deepseek', name: 'DeepSeek', model: 'deepseek-chat' },
+  { id: 'qwen', name: 'Qwen (Alibaba)', model: 'qwen-plus' },
   {
-    id: "vercel-ai-gateway",
-    name: "Vercel AI Gateway",
-    model: "openai/gpt-4o",
+    id: 'vercel-ai-gateway',
+    name: 'Vercel AI Gateway',
+    model: 'openai/gpt-4o',
   },
 ];
 
@@ -28,7 +28,7 @@ export interface UsageInfo {
 
 export interface Message {
   id: string;
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
   usage?: UsageInfo;
 }
@@ -65,11 +65,11 @@ export function AISettingsPanel({
 
   const fetchBilling = async () => {
     try {
-      const response = await fetch("/api/billing");
+      const response = await fetch('/api/billing');
       const data = await response.json();
       setBillingData(data);
     } catch (e) {
-      console.error("Failed to fetch billing data", e);
+      console.error('Failed to fetch billing data', e);
     }
   };
 
@@ -77,12 +77,12 @@ export function AISettingsPanel({
     fetchBilling();
 
     // Load API keys from localStorage
-    const savedKeys = localStorage.getItem("ai-api-keys");
+    const savedKeys = localStorage.getItem('ai-api-keys');
     if (savedKeys) {
       try {
         setApiKeys(JSON.parse(savedKeys));
       } catch (e) {
-        console.error("Failed to parse saved keys", e);
+        console.error('Failed to parse saved keys', e);
       }
     }
   }, []);
@@ -94,7 +94,7 @@ export function AISettingsPanel({
       {/* Credits/Cost Display */}
       {showCredits && billingData && (
         <p className="text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-          Total Cost:{" "}
+          Total Cost:{' '}
           <span className="font-semibold text-black dark:text-white">
             ${billingData.totalCost.toFixed(4)}
           </span>
@@ -137,8 +137,8 @@ export function AISettingsPanel({
           onClick={() => onStreamingChange(true)}
           className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
             useStreaming
-              ? "bg-blue-600 text-white"
-              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              ? 'bg-blue-600 text-white'
+              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
           }`}
         >
           <Zap size={14} />
@@ -149,15 +149,15 @@ export function AISettingsPanel({
           onClick={() => onStreamingChange(false)}
           className={`flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
             !useStreaming
-              ? "bg-blue-600 text-white"
-              : "bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              ? 'bg-blue-600 text-white'
+              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
           }`}
         >
           <Clock size={14} />
           Non-Streaming
         </button>
         <span className="text-xs text-zinc-500 dark:text-zinc-500">
-          {useStreaming ? "Real-time output" : "Better usage tracking"}
+          {useStreaming ? 'Real-time output' : 'Better usage tracking'}
         </span>
       </div>
     </div>
@@ -169,12 +169,12 @@ export function useApiKeys() {
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const savedKeys = localStorage.getItem("ai-api-keys");
+    const savedKeys = localStorage.getItem('ai-api-keys');
     if (savedKeys) {
       try {
         setApiKeys(JSON.parse(savedKeys));
       } catch (e) {
-        console.error("Failed to parse saved keys", e);
+        console.error('Failed to parse saved keys', e);
       }
     }
   }, []);
@@ -188,11 +188,11 @@ export function useBilling() {
 
   const fetchBilling = async () => {
     try {
-      const response = await fetch("/api/billing");
+      const response = await fetch('/api/billing');
       const data = await response.json();
       setBillingData(data);
     } catch (e) {
-      console.error("Failed to fetch billing data", e);
+      console.error('Failed to fetch billing data', e);
     }
   };
 

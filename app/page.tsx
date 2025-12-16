@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
-import { useChat } from "@ai-sdk/react";
-import { useState, useEffect, useMemo } from "react";
-import { Code } from "lucide-react";
+import { useChat } from '@ai-sdk/react';
+import { useState, useEffect, useMemo } from 'react';
+import { Code } from 'lucide-react';
 import {
   AISettingsPanel,
   useApiKeys,
   useBilling,
   providers,
   Message,
-} from "@/components/AISettingsPanel";
+} from '@/components/AISettingsPanel';
 
 export default function Home() {
-  const [selectedProvider, setSelectedProvider] = useState("openai");
-  const [inputValue, setInputValue] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState('openai');
+  const [inputValue, setInputValue] = useState('');
   const [useStreaming, setUseStreaming] = useState(true);
   const [nonStreamingMessages, setNonStreamingMessages] = useState<Message[]>(
     [],
@@ -38,13 +38,13 @@ export default function Home() {
           }>;
           abortSignal?: AbortSignal;
         }) => {
-          const response = await fetch("/api/codereview", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+          const response = await fetch('/api/codereview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               messages: messages.map((m) => ({
                 role: m.role,
-                content: m.parts?.find((p) => p.type === "text")?.text || "",
+                content: m.parts?.find((p) => p.type === 'text')?.text || '',
               })),
               provider: selectedProvider,
               apiKey: apiKeys[selectedProvider],
@@ -78,7 +78,7 @@ export default function Home() {
     },
   });
 
-  const isStreamingLoading = status === "streaming" || status === "submitted";
+  const isStreamingLoading = status === 'streaming' || status === 'submitted';
   const isLoading = useStreaming ? isStreamingLoading : isNonStreamingLoading;
 
   // Non-streaming submit handler
@@ -87,18 +87,18 @@ export default function Home() {
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      role: "user",
+      role: 'user',
       content: inputValue,
     };
 
     setNonStreamingMessages((prev) => [...prev, userMessage]);
-    setInputValue("");
+    setInputValue('');
     setIsNonStreamingLoading(true);
 
     try {
-      const response = await fetch("/api/codereview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch('/api/codereview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [...nonStreamingMessages, userMessage].map((m) => ({
             role: m.role,
@@ -118,7 +118,7 @@ export default function Home() {
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        role: "assistant",
+        role: 'assistant',
         content: data.text,
         usage: data.usage,
       };
@@ -126,7 +126,7 @@ export default function Home() {
       setNonStreamingMessages((prev) => [...prev, assistantMessage]);
       refetchBilling();
     } catch (error) {
-      console.error("Error:", error);
+      console.error('Error:', error);
     } finally {
       setIsNonStreamingLoading(false);
     }
@@ -138,10 +138,10 @@ export default function Home() {
 
     if (useStreaming) {
       await sendMessage({
-        role: "user",
-        parts: [{ type: "text", text: inputValue }],
+        role: 'user',
+        parts: [{ type: 'text', text: inputValue }],
       });
-      setInputValue("");
+      setInputValue('');
     } else {
       await handleNonStreamingSubmit();
     }
@@ -187,7 +187,7 @@ export default function Home() {
             className="flex h-12 w-fit items-center justify-center gap-2 rounded-md bg-blue-600 px-6 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Code size={16} />
-            {isLoading ? "Reviewing..." : "Review Code"}
+            {isLoading ? 'Reviewing...' : 'Review Code'}
           </button>
         </div>
       </form>
@@ -200,27 +200,27 @@ export default function Home() {
           >
             <div className="flex items-center justify-between mb-2">
               <strong className="text-zinc-900 dark:text-zinc-100">
-                {m.role === "user" ? "You" : currentProvider?.name || "AI"}
+                {m.role === 'user' ? 'You' : currentProvider?.name || 'AI'}
               </strong>
               {/* Show usage for non-streaming messages */}
-              {"usage" in m && m.usage && (
+              {'usage' in m && m.usage && (
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">
-                  {m.usage.promptTokens} prompt + {m.usage.completionTokens}{" "}
+                  {m.usage.promptTokens} prompt + {m.usage.completionTokens}{' '}
                   completion = {m.usage.totalTokens} tokens
                 </span>
               )}
             </div>
             <span className="text-zinc-700 dark:text-zinc-300">
               {/* Handle both streaming (parts) and non-streaming (content) formats */}
-              {"parts" in m && m.parts
+              {'parts' in m && m.parts
                 ? m.parts.map((part, i) =>
-                    part.type === "text" ? (
+                    part.type === 'text' ? (
                       <span key={i}>{part.text}</span>
                     ) : null,
                   )
-                : "content" in m
+                : 'content' in m
                   ? m.content
-                  : ""}
+                  : ''}
             </span>
           </div>
         ))}

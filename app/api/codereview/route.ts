@@ -1,42 +1,42 @@
-import { ModelMessage, streamText, generateText } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { tool } from "ai";
-import { z } from "zod";
-import { readFile } from "fs/promises";
-import { deductCredits, getCredits } from "@/lib/billing";
-import { NextResponse } from "next/server";
+import { ModelMessage, streamText, generateText } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { tool } from 'ai';
+import { z } from 'zod';
+import { readFile } from 'fs/promises';
+import { deductCredits, getCredits } from '@/lib/billing';
+import { NextResponse } from 'next/server';
 
 // Provider configurations - exported for reuse
 export const providerConfigs = {
   openai: {
     createProvider: (apiKey: string) => createOpenAI({ apiKey }),
-    defaultModel: "gpt-4o",
+    defaultModel: 'gpt-4o',
   },
   gemini: {
     createProvider: (apiKey: string) => createGoogleGenerativeAI({ apiKey }),
-    defaultModel: "gemini-1.5-pro",
+    defaultModel: 'gemini-1.5-pro',
   },
   anthropic: {
     createProvider: (apiKey: string) => createAnthropic({ apiKey }),
-    defaultModel: "claude-sonnet-4-20250514",
+    defaultModel: 'claude-sonnet-4-20250514',
   },
   deepseek: {
     createProvider: (apiKey: string) =>
       createOpenAI({
         apiKey,
-        baseURL: "https://api.deepseek.com/v1",
+        baseURL: 'https://api.deepseek.com/v1',
       }),
-    defaultModel: "deepseek-chat",
+    defaultModel: 'deepseek-chat',
   },
   qwen: {
     createProvider: (apiKey: string) =>
       createOpenAI({
         apiKey,
-        baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       }),
-    defaultModel: "qwen-plus",
+    defaultModel: 'qwen-plus',
   },
 };
 
@@ -45,16 +45,16 @@ export type ProviderId = keyof typeof providerConfigs;
 // Shared tools
 export const codeTools = {
   readFile: tool({
-    description: "Read the content of a file.",
+    description: 'Read the content of a file.',
     inputSchema: z.object({
-      path: z.string().describe("The path to the file to read."),
+      path: z.string().describe('The path to the file to read.'),
     }),
     execute: async ({ path }) => {
       try {
-        const content = await readFile(path, "utf-8");
+        const content = await readFile(path, 'utf-8');
         return content;
       } catch (error) {
-        return `Error reading file: ${error instanceof Error ? error.message : "Unknown error"}`;
+        return `Error reading file: ${error instanceof Error ? error.message : 'Unknown error'}`;
       }
     },
   }),
@@ -62,11 +62,11 @@ export const codeTools = {
 
 export function getEnvApiKey(providerId: ProviderId): string | undefined {
   const envKeys: Record<ProviderId, string> = {
-    openai: "OPENAI_API_KEY",
-    gemini: "GOOGLE_GENERATIVE_AI_API_KEY",
-    anthropic: "ANTHROPIC_API_KEY",
-    deepseek: "DEEPSEEK_API_KEY",
-    qwen: "QWEN_API_KEY",
+    openai: 'OPENAI_API_KEY',
+    gemini: 'GOOGLE_GENERATIVE_AI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+    deepseek: 'DEEPSEEK_API_KEY',
+    qwen: 'QWEN_API_KEY',
   };
   return process.env[envKeys[providerId]];
 }
@@ -74,14 +74,14 @@ export function getEnvApiKey(providerId: ProviderId): string | undefined {
 export async function POST(req: Request) {
   if (getCredits() <= 0) {
     return NextResponse.json(
-      { error: "Insufficient credits" },
+      { error: 'Insufficient credits' },
       { status: 402 },
     );
   }
 
   const {
     messages,
-    provider: providerId = "openai",
+    provider: providerId = 'openai',
     apiKey,
     stream = true, // Default to streaming
   }: {
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
 
   // Validate provider
   if (!providerConfigs[providerId]) {
-    return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
   }
 
   // Get API key from request or environment

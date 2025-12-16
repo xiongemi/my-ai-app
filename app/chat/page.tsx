@@ -1,26 +1,26 @@
-"use client";
+'use client';
 
-import { useChat } from "@ai-sdk/react";
-import { useState, useMemo } from "react";
-import { MessageCircle, Send, Sparkles } from "lucide-react";
+import { useChat } from '@ai-sdk/react';
+import { useState, useMemo } from 'react';
+import { MessageCircle, Send, Sparkles } from 'lucide-react';
 import {
   AISettingsPanel,
   useApiKeys,
   useBilling,
   providers,
   Message,
-} from "@/components/AISettingsPanel";
+} from '@/components/AISettingsPanel';
 
 export default function ChatPage() {
-  const [selectedProvider, setSelectedProvider] = useState("openai");
-  const [inputValue, setInputValue] = useState("");
+  const [selectedProvider, setSelectedProvider] = useState('openai');
+  const [inputValue, setInputValue] = useState('');
   const [useStreaming, setUseStreaming] = useState(true);
   const [nonStreamingMessages, setNonStreamingMessages] = useState<Message[]>(
     [],
   );
   const [isNonStreamingLoading, setIsNonStreamingLoading] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState(
-    "You are a helpful AI assistant.",
+    'You are a helpful AI assistant.',
   );
   const [showSettings, setShowSettings] = useState(false);
   const [enableTools, setEnableTools] = useState(false);
@@ -43,13 +43,13 @@ export default function ChatPage() {
           }>;
           abortSignal?: AbortSignal;
         }) => {
-          const response = await fetch("/api/chat", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+          const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               messages: messages.map((m) => ({
                 role: m.role,
-                content: m.parts?.find((p) => p.type === "text")?.text || "",
+                content: m.parts?.find((p) => p.type === 'text')?.text || '',
               })),
               provider: selectedProvider,
               apiKey: apiKeys[selectedProvider],
@@ -85,7 +85,7 @@ export default function ChatPage() {
     },
   });
 
-  const isStreamingLoading = status === "streaming" || status === "submitted";
+  const isStreamingLoading = status === 'streaming' || status === 'submitted';
   const isLoading = useStreaming ? isStreamingLoading : isNonStreamingLoading;
 
   // Non-streaming submit handler
@@ -94,18 +94,18 @@ export default function ChatPage() {
 
     const userMessage: Message = {
       id: Date.now().toString(),
-      role: "user",
+      role: 'user',
       content: inputValue,
     };
 
     setNonStreamingMessages((prev) => [...prev, userMessage]);
-    setInputValue("");
+    setInputValue('');
     setIsNonStreamingLoading(true);
 
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [...nonStreamingMessages, userMessage].map((m) => ({
             role: m.role,
@@ -127,7 +127,7 @@ export default function ChatPage() {
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
-        role: "assistant",
+        role: 'assistant',
         content: data.text,
         usage: data.usage,
       };
@@ -135,7 +135,7 @@ export default function ChatPage() {
       setNonStreamingMessages((prev) => [...prev, assistantMessage]);
       refetchBilling();
     } catch (error) {
-      console.error("Error:", error);
+      console.error('Error:', error);
     } finally {
       setIsNonStreamingLoading(false);
     }
@@ -147,10 +147,10 @@ export default function ChatPage() {
 
     if (useStreaming) {
       await sendMessage({
-        role: "user",
-        parts: [{ type: "text", text: inputValue }],
+        role: 'user',
+        parts: [{ type: 'text', text: inputValue }],
       });
-      setInputValue("");
+      setInputValue('');
     } else {
       await handleNonStreamingSubmit();
     }
@@ -192,7 +192,7 @@ export default function ChatPage() {
             className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white w-fit"
           >
             <Sparkles size={14} />
-            {showSettings ? "Hide" : "Show"} Chat Settings
+            {showSettings ? 'Hide' : 'Show'} Chat Settings
           </button>
 
           {/* Collapsible Settings */}
@@ -241,7 +241,7 @@ export default function ChatPage() {
               className="flex h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Send size={16} />
-              {isLoading ? "..." : "Send"}
+              {isLoading ? '...' : 'Send'}
             </button>
           </div>
         </div>
@@ -252,34 +252,34 @@ export default function ChatPage() {
           <div
             key={m.id}
             className={`whitespace-pre-wrap p-4 rounded-lg border ${
-              m.role === "user"
-                ? "border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950"
-                : "border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+              m.role === 'user'
+                ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950'
+                : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900'
             }`}
           >
             <div className="flex items-center justify-between mb-2">
               <strong className="text-zinc-900 dark:text-zinc-100">
-                {m.role === "user" ? "You" : currentProvider?.name || "AI"}
+                {m.role === 'user' ? 'You' : currentProvider?.name || 'AI'}
               </strong>
               {/* Show usage for non-streaming messages */}
-              {"usage" in m && m.usage && (
+              {'usage' in m && m.usage && (
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">
-                  {m.usage.promptTokens} prompt + {m.usage.completionTokens}{" "}
+                  {m.usage.promptTokens} prompt + {m.usage.completionTokens}{' '}
                   completion = {m.usage.totalTokens} tokens
                 </span>
               )}
             </div>
             <span className="text-zinc-700 dark:text-zinc-300">
               {/* Handle both streaming (parts) and non-streaming (content) formats */}
-              {"parts" in m && m.parts
+              {'parts' in m && m.parts
                 ? m.parts.map((part, i) =>
-                    part.type === "text" ? (
+                    part.type === 'text' ? (
                       <span key={i}>{part.text}</span>
                     ) : null,
                   )
-                : "content" in m
+                : 'content' in m
                   ? m.content
-                  : ""}
+                  : ''}
             </span>
           </div>
         ))}

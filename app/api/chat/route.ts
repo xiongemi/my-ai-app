@@ -1,24 +1,24 @@
-import { ModelMessage, streamText, generateText } from "ai";
-import { NextResponse } from "next/server";
+import { ModelMessage, streamText, generateText } from 'ai';
+import { NextResponse } from 'next/server';
 import {
   providerConfigs,
   ProviderId,
   getEnvApiKey,
   codeTools,
-} from "@/app/api/codereview/route";
-import { deductCredits, getCredits } from "@/lib/billing";
+} from '@/app/api/codereview/route';
+import { deductCredits, getCredits } from '@/lib/billing';
 
 export async function POST(req: Request) {
   if (getCredits() <= 0) {
     return NextResponse.json(
-      { error: "Insufficient credits" },
+      { error: 'Insufficient credits' },
       { status: 402 },
     );
   }
 
   const {
     messages,
-    provider: providerId = "openai",
+    provider: providerId = 'openai',
     apiKey,
     stream = true,
     systemPrompt, // Custom system prompt
@@ -34,7 +34,7 @@ export async function POST(req: Request) {
 
   // Validate provider
   if (!providerConfigs[providerId]) {
-    return NextResponse.json({ error: "Invalid provider" }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
   }
 
   // Get API key from request or environment
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
   const modelName = config.defaultModel;
 
   // Default system prompt if none provided
-  const finalSystemPrompt = systemPrompt || "You are a helpful AI assistant.";
+  const finalSystemPrompt = systemPrompt || 'You are a helpful AI assistant.';
 
   const baseOptions = {
     model: providerInstance(modelName),
