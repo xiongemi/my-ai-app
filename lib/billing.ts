@@ -25,6 +25,8 @@ export const modelCosts: Record<string, { input: number; output: number }> = {
   },
 };
 
+export let userCredits = 1.0; // Initial credits in USD
+
 // Usage history for tracking (in-memory)
 export const usageHistory: Array<{
   timestamp: Date;
@@ -35,14 +37,14 @@ export const usageHistory: Array<{
   cost: number;
 }> = [];
 
-// Track total cost instead of remaining credits
-export function trackUsage(
+export function deductCredits(
   model: string,
   promptTokens: number,
   completionTokens: number,
-): { cost: number; totalCost: number } {
+): { cost: number; remaining: number } {
   const costs = modelCosts[model] || modelCosts["gpt-4o"];
   const cost = promptTokens * costs.input + completionTokens * costs.output;
+  userCredits -= cost;
 
   // Track usage
   usageHistory.push({
@@ -54,43 +56,13 @@ export function trackUsage(
     cost,
   });
 
-  return { cost, totalCost: getTotalCost() };
+  return { cost, remaining: userCredits };
 }
 
-// Alias for backward compatibility
-export const deductCredits = trackUsage;
-
-export function getTotalCost(): number {
-  return usageHistory.reduce((sum, entry) => sum + entry.cost, 0);
+export function getCredits() {
+  return userCredits;
 }
 
 export function getUsageHistory() {
   return usageHistory;
-}
-
-// Get cost breakdown by model
-export function getCostByModel(): Record<
-  string,
-  { cost: number; tokens: number; calls: number }
-> {
-  const breakdown: Record<
-    string,
-    { cost: number; tokens: number; calls: number }
-  > = {};
-
-  for (const entry of usageHistory) {
-    if (!breakdown[entry.model]) {
-      breakdown[entry.model] = { cost: 0, tokens: 0, calls: 0 };
-    }
-    breakdown[entry.model].cost += entry.cost;
-    breakdown[entry.model].tokens += entry.totalTokens;
-    breakdown[entry.model].calls += 1;
-  }
-
-  return breakdown;
-}
-
-// Legacy function - now returns total cost (for backward compatibility)
-export function getCredits() {
-  return getTotalCost();
 }

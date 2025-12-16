@@ -3,22 +3,26 @@ import { NextResponse } from "next/server";
 import {
   providerConfigs,
   ProviderId,
-  resolveApiKey,
+  getEnvApiKey,
   codeTools,
-  getProviderAndModel,
-} from "@/lib/ai-providers";
-import { deductCredits } from "@/lib/billing";
-
-const DEFAULT_SYSTEM_PROMPT = "You are a helpful AI assistant.";
+} from "@/app/api/codereview/route";
+import { deductCredits, getCredits } from "@/lib/billing";
 
 export async function POST(req: Request) {
+  if (getCredits() <= 0) {
+    return NextResponse.json(
+      { error: "Insufficient credits" },
+      { status: 402 },
+    );
+  }
+
   const {
     messages,
     provider: providerId = "openai",
     apiKey,
     stream = true,
-    systemPrompt,
-    enableTools = false,
+    systemPrompt, // Custom system prompt
+    enableTools = false, // Whether to enable file reading tools
   }: {
     messages: CoreMessage[];
     provider?: ProviderId;
@@ -34,7 +38,7 @@ export async function POST(req: Request) {
   }
 
   // Get API key from request or environment
-  const resolvedApiKey = resolveApiKey(providerId, apiKey);
+  const resolvedApiKey = apiKey || getEnvApiKey(providerId);
 
   if (!resolvedApiKey) {
     return NextResponse.json(
@@ -45,14 +49,15 @@ export async function POST(req: Request) {
     );
   }
 
-  const { provider, modelName } = getProviderAndModel(
-    providerId,
-    resolvedApiKey,
-  );
-  const finalSystemPrompt = systemPrompt || DEFAULT_SYSTEM_PROMPT;
+  const config = providerConfigs[providerId];
+  const providerInstance = config.createProvider(resolvedApiKey);
+  const modelName = config.defaultModel;
+
+  // Default system prompt if none provided
+  const finalSystemPrompt = systemPrompt || "You are a helpful AI assistant.";
 
   const baseOptions = {
-    model: provider(modelName),
+    model: providerInstance(modelName),
     system: finalSystemPrompt,
     messages,
     ...(enableTools && { tools: codeTools }),
@@ -76,6 +81,7 @@ export async function POST(req: Request) {
     // Non-streaming mode - better for accurate usage tracking
     const result = await generateText(baseOptions);
 
+    // Accurate usage tracking - AI SDK v5 uses inputTokens/outputTokens
     const promptTokens = result.usage.inputTokens ?? 0;
     const completionTokens = result.usage.outputTokens ?? 0;
     const billingResult = deductCredits(

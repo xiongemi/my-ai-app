@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import ThemeSwitcher from "../components/ThemeSwitcher";
 import Link from "next/link";
-import { Settings, MessageCircle, Code } from "lucide-react";
+import { Settings } from "lucide-react";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -34,30 +34,10 @@ export default function RootLayout({
         <ThemeProvider attribute="class">
           <header className="w-full border-b border-zinc-200 dark:border-zinc-800">
             <div className="flex items-center justify-between h-16 px-4 mx-auto max-w-7xl sm:px-6 lg:px-8">
-              {/* Left side: Logo + Navigation */}
-              <div className="flex items-center gap-6">
-                <h1 className="text-2xl font-bold text-black dark:text-white">
-                  <Link href="/">AI Agent</Link>
-                </h1>
-                <nav className="flex items-center gap-4">
-                  <Link
-                    href="/"
-                    className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
-                  >
-                    <Code size={16} />
-                    Code Review
-                  </Link>
-                  <Link
-                    href="/chat"
-                    className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
-                  >
-                    <MessageCircle size={16} />
-                    Chat
-                  </Link>
-                </nav>
-              </div>
-              {/* Right side: Theme + Settings */}
-              <div className="flex items-center gap-4">
+              <h1 className="text-2xl font-bold text-black dark:text-white">
+                <Link href="/">AI Agent</Link>
+              </h1>
+              <div className="flex items-center">
                 <ThemeSwitcher />
                 <Link
                   href="/settings"
