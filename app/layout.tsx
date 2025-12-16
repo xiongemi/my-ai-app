@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from 'next-themes'
 import ThemeSwitcher from '../components/ThemeSwitcher'
 import Link from 'next/link'
+import { Settings } from 'lucide-react'
 import "./globals.css";
 
 const geistSans = Geist({
@@ -40,8 +41,9 @@ export default function RootLayout({
                 <ThemeSwitcher />
                 <Link
                   href="/settings"
-                  className="text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
+                  className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
                 >
+                  <Settings size={16} />
                   Settings
                 </Link>
               </div>

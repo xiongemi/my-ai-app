@@ -2,6 +2,7 @@
 
 import { useChat } from '@ai-sdk/react';
 import { useState, useEffect } from 'react';
+import { Code } from 'lucide-react';
 
 export default function Home() {
   const [credits, setCredits] = useState(0);
@@ -49,6 +50,7 @@ export default function Home() {
             type="submit"
             className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
           >
+            <Code size={16} />
             Review Code
           </button>
         </div>
