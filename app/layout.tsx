@@ -31,7 +31,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen bg-zinc-50 dark:bg-black`}
       >
         <ThemeProvider attribute="class">
-          <header className="w-full">
+          <header className="w-full border-b border-zinc-200 dark:border-zinc-800">
             <div className="flex items-center justify-between h-16 px-4 mx-auto max-w-7xl sm:px-6 lg:px-8">
               <h1 className="text-2xl font-bold text-black dark:text-white">
                 <Link href="/">AI Agent</Link>
