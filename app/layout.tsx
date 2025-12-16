@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ThemeProvider } from 'next-themes'
-import ThemeSwitcher from '../components/ThemeSwitcher'
-import Link from 'next/link'
-import { Settings, MessageCircle, Code } from 'lucide-react'
+import { ThemeProvider } from "next-themes";
+import ThemeSwitcher from "../components/ThemeSwitcher";
+import Link from "next/link";
+import { Settings, MessageCircle, Code } from "lucide-react";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -69,9 +69,7 @@ export default function RootLayout({
               </div>
             </div>
           </header>
-          <main className="flex flex-col flex-1">
-            {children}
-          </main>
+          <main className="flex flex-col flex-1">{children}</main>
         </ThemeProvider>
       </body>
     </html>

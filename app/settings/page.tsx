@@ -1,8 +1,8 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { Eye, EyeOff, Save, ArrowLeft, Sparkles } from 'lucide-react';
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Eye, EyeOff, Save, ArrowLeft, Sparkles } from "lucide-react";
 
 interface ApiKeyConfig {
   id: string;
@@ -12,11 +12,11 @@ interface ApiKeyConfig {
 }
 
 const defaultProviders: ApiKeyConfig[] = [
-  { id: 'openai', name: 'OpenAI', placeholder: 'sk-...', key: '' },
-  { id: 'gemini', name: 'Google Gemini', placeholder: 'AIza...', key: '' },
-  { id: 'deepseek', name: 'DeepSeek', placeholder: 'sk-...', key: '' },
-  { id: 'anthropic', name: 'Anthropic', placeholder: 'sk-ant-...', key: '' },
-  { id: 'qwen', name: 'Qwen (Alibaba)', placeholder: 'sk-...', key: '' },
+  { id: "openai", name: "OpenAI", placeholder: "sk-...", key: "" },
+  { id: "gemini", name: "Google Gemini", placeholder: "AIza...", key: "" },
+  { id: "deepseek", name: "DeepSeek", placeholder: "sk-...", key: "" },
+  { id: "anthropic", name: "Anthropic", placeholder: "sk-ant-...", key: "" },
+  { id: "qwen", name: "Qwen (Alibaba)", placeholder: "sk-...", key: "" },
 ];
 
 export default function SettingsPage() {
@@ -26,29 +26,29 @@ export default function SettingsPage() {
 
   useEffect(() => {
     // Load saved keys from localStorage
-    const savedKeys = localStorage.getItem('ai-api-keys');
+    const savedKeys = localStorage.getItem("ai-api-keys");
     if (savedKeys) {
       try {
         const parsed = JSON.parse(savedKeys);
-        setProviders(prev =>
-          prev.map(p => ({
+        setProviders((prev) =>
+          prev.map((p) => ({
             ...p,
-            key: parsed[p.id] || '',
-          }))
+            key: parsed[p.id] || "",
+          })),
         );
       } catch (e) {
-        console.error('Failed to parse saved keys', e);
+        console.error("Failed to parse saved keys", e);
       }
     }
   }, []);
 
   const toggleVisibility = (id: string) => {
-    setVisibleKeys(prev => ({ ...prev, [id]: !prev[id] }));
+    setVisibleKeys((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const updateKey = (id: string, value: string) => {
-    setProviders(prev =>
-      prev.map(p => (p.id === id ? { ...p, key: value } : p))
+    setProviders((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, key: value } : p)),
     );
     setSaved(false);
   };
@@ -56,9 +56,9 @@ export default function SettingsPage() {
   const handleSave = () => {
     const keysToSave = providers.reduce(
       (acc, p) => ({ ...acc, [p.id]: p.key }),
-      {}
+      {},
     );
-    localStorage.setItem('ai-api-keys', JSON.stringify(keysToSave));
+    localStorage.setItem("ai-api-keys", JSON.stringify(keysToSave));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -89,7 +89,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex flex-col gap-4">
-            {providers.map(provider => (
+            {providers.map((provider) => (
               <div
                 key={provider.id}
                 className="flex flex-col gap-2 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
@@ -103,9 +103,9 @@ export default function SettingsPage() {
                 <div className="relative flex items-center">
                   <input
                     id={provider.id}
-                    type={visibleKeys[provider.id] ? 'text' : 'password'}
+                    type={visibleKeys[provider.id] ? "text" : "password"}
                     value={provider.key}
-                    onChange={e => updateKey(provider.id, e.target.value)}
+                    onChange={(e) => updateKey(provider.id, e.target.value)}
                     placeholder={provider.placeholder}
                     className="w-full px-3 py-2 pr-10 text-sm border border-zinc-300 dark:border-zinc-700 rounded-md bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
@@ -130,11 +130,12 @@ export default function SettingsPage() {
             className="flex items-center justify-center gap-2 w-full sm:w-fit px-6 py-3 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
           >
             <Save size={16} />
-            {saved ? 'Saved!' : 'Save API Keys'}
+            {saved ? "Saved!" : "Save API Keys"}
           </button>
 
           <p className="text-xs text-zinc-500 dark:text-zinc-500">
-            API keys are stored locally in your browser. They are never sent to our servers.
+            API keys are stored locally in your browser. They are never sent to
+            our servers.
           </p>
         </div>
       </div>
