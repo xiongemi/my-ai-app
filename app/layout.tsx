@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ThemeProvider } from 'next-themes'
+import ThemeSwitcher from '../components/ThemeSwitcher'
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,20 +29,27 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen bg-zinc-50 dark:bg-black`}
       >
-        <header className="w-full">
-          <div className="flex items-center justify-between h-16 px-4 mx-auto max-w-7xl sm:px-6 lg:px-8">
-            <h1 className="text-2xl font-bold text-black dark:text-white">
-              <a href="/">AI Agent</a>
-            </h1>
-            <a
-              href="/settings"
-              className="text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
-            >
-              Settings
-            </a>
-          </div>
-        </header>
-        <main className="flex flex-col flex-1">{children}</main>
+        <ThemeProvider attribute="class">
+          <header className="w-full">
+            <div className="flex items-center justify-between h-16 px-4 mx-auto max-w-7xl sm:px-6 lg:px-8">
+              <h1 className="text-2xl font-bold text-black dark:text-white">
+                <a href="/">AI Agent</a>
+              </h1>
+              <div className="flex items-center">
+                <ThemeSwitcher />
+                <a
+                  href="/settings"
+                  className="text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
+                >
+                  Settings
+                </a>
+              </div>
+            </div>
+          </header>
+          <main className="flex flex-col flex-1">
+            {children}
+          </main>
+        </ThemeProvider>
       </body>
     </html>
   );
