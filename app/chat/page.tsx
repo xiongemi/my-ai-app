@@ -2,7 +2,7 @@
 
 import { useChat } from '@ai-sdk/react';
 import { useState, useEffect, useMemo } from 'react';
-import { Code, ChevronDown, Zap, Clock } from 'lucide-react';
+import { MessageCircle, ChevronDown, Zap, Clock, Send, Sparkles } from 'lucide-react';
 
 const providers = [
   { id: 'openai', name: 'OpenAI (GPT-4o)', model: 'gpt-4o' },
@@ -25,7 +25,7 @@ interface Message {
   usage?: UsageInfo;
 }
 
-export default function Home() {
+export default function ChatPage() {
   const [credits, setCredits] = useState(0);
   const [selectedProvider, setSelectedProvider] = useState('openai');
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
@@ -33,6 +33,9 @@ export default function Home() {
   const [useStreaming, setUseStreaming] = useState(true);
   const [nonStreamingMessages, setNonStreamingMessages] = useState<Message[]>([]);
   const [isNonStreamingLoading, setIsNonStreamingLoading] = useState(false);
+  const [systemPrompt, setSystemPrompt] = useState('You are a helpful AI assistant.');
+  const [showSettings, setShowSettings] = useState(false);
+  const [enableTools, setEnableTools] = useState(false);
 
   const fetchCredits = async () => {
     const response = await fetch('/api/billing');
@@ -54,14 +57,14 @@ export default function Home() {
     }
   }, []);
 
-  // Create a custom transport to inject provider and apiKey (for streaming)
+  // Create a custom transport to inject provider, apiKey, and systemPrompt (for streaming)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const transport = useMemo(() => ({
     sendMessages: async ({ messages, abortSignal }: { 
       messages: Array<{ role: string; parts: Array<{ type: string; text?: string }> }>;
       abortSignal?: AbortSignal;
     }) => {
-      const response = await fetch('/api/codereview', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -71,6 +74,8 @@ export default function Home() {
           })),
           provider: selectedProvider,
           apiKey: apiKeys[selectedProvider],
+          systemPrompt,
+          enableTools,
           stream: true,
         }),
         signal: abortSignal,
@@ -86,7 +91,7 @@ export default function Home() {
       return undefined;
     },
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  }) as any, [selectedProvider, apiKeys]);
+  }) as any, [selectedProvider, apiKeys, systemPrompt, enableTools]);
 
   const { messages: streamingMessages, status, sendMessage } = useChat({
     transport,
@@ -113,7 +118,7 @@ export default function Home() {
     setIsNonStreamingLoading(true);
 
     try {
-      const response = await fetch('/api/codereview', {
+      const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -123,6 +128,8 @@ export default function Home() {
           })),
           provider: selectedProvider,
           apiKey: apiKeys[selectedProvider],
+          systemPrompt,
+          enableTools,
           stream: false,
         }),
       });
@@ -172,11 +179,12 @@ export default function Home() {
   return (
     <div className="w-full max-w-3xl mx-auto py-16 px-4 sm:px-6 lg:px-8">
       <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-        <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-          AI Code Reviewer
+        <h1 className="flex items-center gap-3 text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
+          <MessageCircle size={32} />
+          AI Chat
         </h1>
         <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-          Enter the path to a file to have it reviewed by an AI agent.
+          Chat with AI using a custom system prompt.
         </p>
         <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
           Remaining Credits: <span className="font-semibold text-black dark:text-white">${credits.toFixed(4)}</span>
@@ -214,6 +222,48 @@ export default function Home() {
             )}
           </div>
 
+          {/* Settings Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowSettings(!showSettings)}
+            className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white w-fit"
+          >
+            <Sparkles size={14} />
+            {showSettings ? 'Hide' : 'Show'} Chat Settings
+          </button>
+
+          {/* Collapsible Settings */}
+          {showSettings && (
+            <div className="flex flex-col gap-4 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
+              {/* System Prompt */}
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  System Prompt
+                </label>
+                <textarea
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  placeholder="Enter a custom system prompt..."
+                  rows={3}
+                  className="w-full p-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 resize-none"
+                />
+              </div>
+
+              {/* Enable Tools Toggle */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enableTools}
+                  onChange={(e) => setEnableTools(e.target.checked)}
+                  className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600"
+                />
+                <span className="text-sm text-zinc-700 dark:text-zinc-300">
+                  Enable file reading tools
+                </span>
+              </label>
+            </div>
+          )}
+
           {/* Streaming Toggle */}
           <div className="flex items-center gap-3 max-w-md">
             <button
@@ -245,20 +295,23 @@ export default function Home() {
             </span>
           </div>
 
-          <input
-            className="w-full max-w-md p-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400"
-            value={inputValue}
-            placeholder="Enter file path..."
-            onChange={(e) => setInputValue(e.target.value)}
-          />
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Code size={16} />
-            {isLoading ? 'Reviewing...' : 'Review Code'}
-          </button>
+          {/* Message Input */}
+          <div className="flex gap-2 max-w-md">
+            <input
+              className="flex-1 p-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400"
+              value={inputValue}
+              placeholder="Type your message..."
+              onChange={(e) => setInputValue(e.target.value)}
+            />
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Send size={16} />
+              {isLoading ? '...' : 'Send'}
+            </button>
+          </div>
         </div>
       </form>
 
@@ -266,7 +319,11 @@ export default function Home() {
         {displayMessages.map((m) => (
           <div 
             key={m.id} 
-            className="whitespace-pre-wrap p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+            className={`whitespace-pre-wrap p-4 rounded-lg border ${
+              m.role === 'user' 
+                ? 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950' 
+                : 'border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900'
+            }`}
           >
             <div className="flex items-center justify-between mb-2">
               <strong className="text-zinc-900 dark:text-zinc-100">
@@ -294,3 +351,4 @@ export default function Home() {
     </div>
   );
 }
+
