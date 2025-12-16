@@ -1,11 +1,16 @@
 import { CoreMessage, streamText } from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { createOpenAI } from '@ai-sdk/openai';
 import { tool } from 'ai';
 import { z } from 'zod';
 import { readFile } from 'fs/promises';
+import { deductCredits, getCredits } from '@/lib/billing';
+import { NextResponse } from 'next/server';
 
 export async function POST(req: Request) {
+  if (getCredits() <= 0) {
+    return NextResponse.json({ error: 'Insufficient credits' }, { status: 402 });
+  }
+
   const { messages }: { messages: CoreMessage[] } = await req.json();
 
   const result = await streamText({
@@ -29,7 +34,9 @@ You will be given a file path and you will review the code in that file.`,
       }),
     },
     messages,
-    stopWhen: stepCountIs(5),
+    onFinish: ({ usage }) => {
+      deductCredits('gpt-4o', usage.promptTokens, usage.completionTokens);
+    },
   });
 
   return result.toAIStreamResponse();

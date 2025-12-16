@@ -1,10 +1,26 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
+import { useState, useEffect } from 'react';
 
 export default function Home() {
+  const [credits, setCredits] = useState(0);
+
+  const fetchCredits = async () => {
+    const response = await fetch('/api/billing');
+    const data = await response.json();
+    setCredits(data.credits);
+  };
+
+  useEffect(() => {
+    fetchCredits();
+  }, []);
+
   const { messages, input, handleInputChange, handleSubmit } = useChat({
     api: '/api/codereview',
+    onFinish: () => {
+      fetchCredits();
+    },
   });
 
   return (
@@ -16,6 +32,9 @@ export default function Home() {
           </h1>
           <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
             Enter the path to a file to have it reviewed by an AI agent.
+          </p>
+          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
+            Remaining Credits: <span className="font-semibold text-black dark:text-white">${credits.toFixed(4)}</span>
           </p>
         </div>
 
