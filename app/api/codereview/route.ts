@@ -31,6 +31,75 @@ export const codeTools = {
       }
     },
   }),
+  readPullRequest: tool({
+    description: 'Read files from a public GitHub pull request. Provide the PR URL to fetch all changed files and their contents.',
+    inputSchema: z.object({
+      prUrl: z.string().describe('The GitHub PR URL (e.g., https://github.com/owner/repo/pull/123).'),
+    }),
+    execute: async ({ prUrl }) => {
+      try {
+        // Parse PR URL: https://github.com/owner/repo/pull/123
+        const prUrlMatch = prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i);
+        if (!prUrlMatch) {
+          return 'Error: Invalid GitHub PR URL format. Expected: https://github.com/owner/repo/pull/123';
+        }
+
+        const [, owner, repo, prNumber] = prUrlMatch;
+
+        // Fetch PR files using GitHub REST API (no auth needed for public repos)
+        const filesResponse = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}/files`,
+          {
+            headers: {
+              Accept: 'application/vnd.github.v3+json',
+            },
+          },
+        );
+
+        if (!filesResponse.ok) {
+          if (filesResponse.status === 404) {
+            return `Error: PR not found. Make sure the PR is public and the URL is correct.`;
+          }
+          return `Error fetching PR files: ${filesResponse.status} ${filesResponse.statusText}`;
+        }
+
+        const files = await filesResponse.json();
+
+        if (!Array.isArray(files) || files.length === 0) {
+          return 'No files found in this pull request.';
+        }
+
+        // Format the response with file information
+        const fileContents = files.map((file: any) => {
+          const content = file.patch || file.contents || '';
+          return {
+            filename: file.filename,
+            status: file.status, // added, modified, removed, renamed
+            additions: file.additions,
+            deletions: file.deletions,
+            changes: file.changes,
+            patch: content.substring(0, 50000), // Limit patch size
+            raw_url: file.contents_url || file.blob_url,
+          };
+        });
+
+        return JSON.stringify(
+          {
+            pr_url: prUrl,
+            owner,
+            repo,
+            pr_number: prNumber,
+            total_files: files.length,
+            files: fileContents,
+          },
+          null,
+          2,
+        );
+      } catch (error) {
+        return `Error reading pull request: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      }
+    },
+  }),
 };
 
 export async function POST(req: Request) {
