@@ -19,4 +19,3 @@ describe('ThemeSwitcher', () => {
     expect(document.body).toBeInTheDocument();
   });
 });
-

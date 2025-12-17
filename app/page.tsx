@@ -16,10 +16,7 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false);
 
   // Use useCallback so the function reference is stable
-  const getExtraBody = useCallback(
-    () => ({ systemPrompt }),
-    [systemPrompt],
-  );
+  const getExtraBody = useCallback(() => ({ systemPrompt }), [systemPrompt]);
 
   const {
     selectedProvider,

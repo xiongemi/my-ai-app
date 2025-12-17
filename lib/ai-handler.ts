@@ -9,11 +9,7 @@ import {
   type StopCondition,
 } from 'ai';
 import { NextResponse } from 'next/server';
-import {
-  providerConfigs,
-  ProviderId,
-  getEnvApiKey,
-} from '@/lib/providers';
+import { providerConfigs, ProviderId, getEnvApiKey } from '@/lib/providers';
 import { deductCredits, getCredits } from '@/lib/billing';
 
 export interface AIHandlerOptions {
@@ -104,39 +100,39 @@ export async function handleAIRequest(options: AIHandlerOptions) {
   // Type assertion: providers return LanguageModelV1 | LanguageModelV2, but streamText expects LanguageModel
   const model = provider(modelName) as any as LanguageModel;
 
-    if (stream) {
-      // Streaming mode
-      const result = streamText({
-        model,
-        system: systemPrompt,
-        ...(tools && { tools }),
-        messages,
-        ...(stopWhen && { stopWhen }),
-        onFinish: ({ usage, finishReason }) => {
-          console.log(
-            `[${logPrefix}] Stream finished. Reason: ${finishReason}, Tokens: ${usage.inputTokens}/${usage.outputTokens}`,
-          );
-          deductCredits(
-            modelName,
-            usage.inputTokens ?? 0,
-            usage.outputTokens ?? 0,
-          );
+  if (stream) {
+    // Streaming mode
+    const result = streamText({
+      model,
+      system: systemPrompt,
+      ...(tools && { tools }),
+      messages,
+      ...(stopWhen && { stopWhen }),
+      onFinish: ({ usage, finishReason }) => {
+        console.log(
+          `[${logPrefix}] Stream finished. Reason: ${finishReason}, Tokens: ${usage.inputTokens}/${usage.outputTokens}`,
+        );
+        deductCredits(
+          modelName,
+          usage.inputTokens ?? 0,
+          usage.outputTokens ?? 0,
+        );
+      },
+      ...(enableStepLogging && {
+        onStepFinish: ({ text, toolCalls, toolResults, finishReason }) => {
+          if (toolCalls && toolCalls.length > 0) {
+            console.log(
+              `[${logPrefix}] Tool calls made: ${toolCalls.map((tc) => tc.toolName).join(', ')}`,
+            );
+          }
+          if (toolResults && toolResults.length > 0) {
+            console.log(
+              `[${logPrefix}] Tool results received: ${toolResults.length} results, Step finish reason: ${finishReason}`,
+            );
+          }
         },
-        ...(enableStepLogging && {
-          onStepFinish: ({ text, toolCalls, toolResults, finishReason }) => {
-            if (toolCalls && toolCalls.length > 0) {
-              console.log(
-                `[${logPrefix}] Tool calls made: ${toolCalls.map((tc) => tc.toolName).join(', ')}`,
-              );
-            }
-            if (toolResults && toolResults.length > 0) {
-              console.log(
-                `[${logPrefix}] Tool results received: ${toolResults.length} results, Step finish reason: ${finishReason}`,
-              );
-            }
-          },
-        }),
-      });
+      }),
+    });
 
     return result.toUIMessageStreamResponse({
       ...(enableUsageMetadata && {
@@ -192,4 +188,3 @@ export async function handleAIRequest(options: AIHandlerOptions) {
     });
   }
 }
-

@@ -9,4 +9,3 @@ if (typeof globalThis.TransformStream === 'undefined') {
     }
   };
 }
-

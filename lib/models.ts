@@ -29,4 +29,3 @@ export function getModelInfo(
 ): ModelInfo | undefined {
   return models[providerId]?.models.find((m) => m.id === modelId);
 }
-

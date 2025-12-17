@@ -71,8 +71,7 @@ export function AISettingsPanel({
   );
 
   // Determine the current selected model (use prop or default)
-  const currentModel =
-    selectedModel || getDefaultModel(selectedProvider) || '';
+  const currentModel = selectedModel || getDefaultModel(selectedProvider) || '';
 
   // Handle provider change - reset model to default
   const handleProviderChange = (provider: string) => {

@@ -1,4 +1,8 @@
-import { providerConfigs, getEnvApiKey, type ProviderId } from '@/lib/providers';
+import {
+  providerConfigs,
+  getEnvApiKey,
+  type ProviderId,
+} from '@/lib/providers';
 
 describe('Providers', () => {
   describe('providerConfigs', () => {
@@ -62,4 +66,3 @@ describe('Providers', () => {
     });
   });
 });
-

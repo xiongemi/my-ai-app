@@ -54,4 +54,3 @@ export function getEnvApiKey(providerId: ProviderId): string | undefined {
   };
   return process.env[envKeys[providerId]];
 }
-

@@ -20,14 +20,11 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   );
 
   // Reset model when provider changes
-  const handleProviderChange = useCallback(
-    (provider: string) => {
-      const defaultModel = getDefaultModel(provider);
-      setSelectedProvider(provider);
-      setSelectedModel(defaultModel);
-    },
-    [],
-  );
+  const handleProviderChange = useCallback((provider: string) => {
+    const defaultModel = getDefaultModel(provider);
+    setSelectedProvider(provider);
+    setSelectedModel(defaultModel);
+  }, []);
   const [inputValue, setInputValue] = useState('');
   const [useStreaming, setUseStreaming] = useState(true);
   const [nonStreamingMessages, setNonStreamingMessages] = useState<Message[]>(
@@ -64,7 +61,7 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     console.log(
       `[Transport Created] Provider: ${selectedProvider}, Model: ${selectedModel}`,
     );
-    
+
     return new DefaultChatTransport({
       api: endpoint,
       // Use prepareSendMessagesRequest to explicitly include messages in the request body
@@ -74,12 +71,12 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
         const currentModel = modelRef.current;
         const currentApiKeys = apiKeysRef.current;
         const providerApiKey = currentApiKeys[currentProvider];
-        
+
         // Debug logging for all providers
         console.log(
           `[Frontend Streaming] Provider: ${currentProvider}, Model: ${currentModel}, API Key: ${providerApiKey ? providerApiKey.substring(0, 10) + '...' : 'NOT SET'}`,
         );
-        
+
         return {
           body: {
             messages,
@@ -150,12 +147,12 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
         stream: false,
         ...(extraBody?.() ?? {}),
       };
-      
+
       // Debug logging for non-streaming requests
       console.log(
         `[Frontend Non-Streaming] Provider: ${selectedProvider}, Model: ${selectedModel}, API Key: ${apiKeys[selectedProvider] ? apiKeys[selectedProvider].substring(0, 10) + '...' : 'NOT SET'}`,
       );
-      
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

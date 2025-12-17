@@ -23,14 +23,21 @@ export const codeTools = {
     },
   }),
   readPullRequest: tool({
-    description: 'Read files from a public GitHub pull request. Provide the PR URL to fetch all changed files and their contents.',
+    description:
+      'Read files from a public GitHub pull request. Provide the PR URL to fetch all changed files and their contents.',
     inputSchema: z.object({
-      prUrl: z.string().describe('The GitHub PR URL (e.g., https://github.com/owner/repo/pull/123).'),
+      prUrl: z
+        .string()
+        .describe(
+          'The GitHub PR URL (e.g., https://github.com/owner/repo/pull/123).',
+        ),
     }),
     execute: async ({ prUrl }) => {
       try {
         // Parse PR URL: https://github.com/owner/repo/pull/123
-        const prUrlMatch = prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i);
+        const prUrlMatch = prUrl.match(
+          /github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i,
+        );
         if (!prUrlMatch) {
           return 'Error: Invalid GitHub PR URL format. Expected: https://github.com/owner/repo/pull/123';
         }
