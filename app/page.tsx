@@ -13,6 +13,8 @@ export default function Home() {
   const {
     selectedProvider,
     setSelectedProvider,
+    selectedModel,
+    setSelectedModel,
     inputValue,
     setInputValue,
     useStreaming,
@@ -43,6 +45,8 @@ export default function Home() {
           <AISettingsPanel
             selectedProvider={selectedProvider}
             onProviderChange={setSelectedProvider}
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
             useStreaming={useStreaming}
             onStreamingChange={setUseStreaming}
           />
@@ -90,7 +94,11 @@ export default function Home() {
             disabled={isLoading}
             className="flex h-12 w-fit items-center justify-center gap-2 rounded-md bg-blue-600 px-6 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {inputMode === 'file' ? <Code size={16} /> : <GitPullRequest size={16} />}
+            {inputMode === 'file' ? (
+              <Code size={16} />
+            ) : (
+              <GitPullRequest size={16} />
+            )}
             {isLoading ? 'Reviewing...' : 'Review Code'}
           </button>
         </div>
@@ -104,9 +112,7 @@ export default function Home() {
             className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
           />
           <div className="flex-1">
-            <p className="font-medium text-red-800 dark:text-red-200">
-              Error
-            </p>
+            <p className="font-medium text-red-800 dark:text-red-200">Error</p>
             <p className="text-sm text-red-700 dark:text-red-300 mt-1">
               {error.message}
             </p>

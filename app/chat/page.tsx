@@ -21,6 +21,8 @@ export default function ChatPage() {
   const {
     selectedProvider,
     setSelectedProvider,
+    selectedModel,
+    setSelectedModel,
     inputValue,
     setInputValue,
     useStreaming,
@@ -55,6 +57,8 @@ export default function ChatPage() {
           <AISettingsPanel
             selectedProvider={selectedProvider}
             onProviderChange={setSelectedProvider}
+            selectedModel={selectedModel}
+            onModelChange={setSelectedModel}
             useStreaming={useStreaming}
             onStreamingChange={setUseStreaming}
           />

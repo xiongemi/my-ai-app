@@ -1,4 +1,9 @@
-import { streamText, generateText, convertToModelMessages, UIMessage } from 'ai';
+import {
+  streamText,
+  generateText,
+  convertToModelMessages,
+  UIMessage,
+} from 'ai';
 import { NextResponse } from 'next/server';
 import {
   providerConfigs,
@@ -21,6 +26,7 @@ export async function POST(req: Request) {
       messages: rawMessages,
       provider: providerId = 'openai',
       apiKey,
+      model: requestedModel,
       stream = true,
       systemPrompt, // Custom system prompt
       enableTools = false, // Whether to enable file reading tools
@@ -28,6 +34,7 @@ export async function POST(req: Request) {
       messages: UIMessage[];
       provider?: ProviderId;
       apiKey?: string;
+      model?: string;
       stream?: boolean;
       systemPrompt?: string;
       enableTools?: boolean;
@@ -62,14 +69,16 @@ export async function POST(req: Request) {
     }
 
     const config = providerConfigs[providerId];
-    const providerInstance = config.createProvider(resolvedApiKey);
-    const modelName = config.defaultModel;
+    const provider = config.createProvider(resolvedApiKey);
+    // Use requested model or fall back to default
+    const modelName = requestedModel || config.defaultModel;
+    const model = provider(modelName);
 
     // Default system prompt if none provided
     const finalSystemPrompt = systemPrompt || 'You are a helpful AI assistant.';
 
     const baseOptions = {
-      model: providerInstance(modelName),
+      model,
       system: finalSystemPrompt,
       messages,
       ...(enableTools && { tools: codeTools }),

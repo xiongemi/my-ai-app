@@ -1,23 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ChevronDown, Zap, Clock } from 'lucide-react';
+import {
+  getModelsForProvider,
+  getDefaultModel,
+  type ModelInfo,
+} from '@/lib/models';
 
 export const providers = [
-  { id: 'openai', name: 'OpenAI (GPT-4o)', model: 'gpt-4o' },
-  { id: 'gemini', name: 'Google Gemini', model: 'gemini-1.5-pro' },
-  {
-    id: 'anthropic',
-    name: 'Anthropic (Claude)',
-    model: 'claude-sonnet-4-20250514',
-  },
-  { id: 'deepseek', name: 'DeepSeek', model: 'deepseek-chat' },
-  { id: 'qwen', name: 'Qwen (Alibaba)', model: 'qwen-plus' },
-  {
-    id: 'vercel-ai-gateway',
-    name: 'Vercel AI Gateway',
-    model: 'openai/gpt-4o',
-  },
+  { id: 'openai', name: 'OpenAI' },
+  { id: 'gemini', name: 'Google Gemini' },
+  { id: 'anthropic', name: 'Anthropic (Claude)' },
+  { id: 'deepseek', name: 'DeepSeek' },
+  { id: 'qwen', name: 'Qwen (Alibaba)' },
+  { id: 'vercel-ai-gateway', name: 'Vercel AI Gateway' },
 ];
 
 export interface UsageInfo {
@@ -48,6 +45,8 @@ export interface BillingData {
 interface AISettingsPanelProps {
   selectedProvider: string;
   onProviderChange: (provider: string) => void;
+  selectedModel?: string;
+  onModelChange?: (model: string) => void;
   useStreaming: boolean;
   onStreamingChange: (streaming: boolean) => void;
   showCredits?: boolean;
@@ -56,12 +55,32 @@ interface AISettingsPanelProps {
 export function AISettingsPanel({
   selectedProvider,
   onProviderChange,
+  selectedModel,
+  onModelChange,
   useStreaming,
   onStreamingChange,
   showCredits = true,
 }: AISettingsPanelProps) {
   const [billingData, setBillingData] = useState<BillingData | null>(null);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+
+  // Get available models for the selected provider
+  const availableModels = useMemo(
+    () => getModelsForProvider(selectedProvider),
+    [selectedProvider],
+  );
+
+  // Determine the current selected model (use prop or default)
+  const currentModel =
+    selectedModel || getDefaultModel(selectedProvider) || '';
+
+  // Handle provider change - reset model to default
+  const handleProviderChange = (provider: string) => {
+    onProviderChange(provider);
+    if (onModelChange) {
+      onModelChange(getDefaultModel(provider));
+    }
+  };
 
   const fetchBilling = async () => {
     try {
@@ -101,15 +120,15 @@ export function AISettingsPanel({
         </p>
       )}
 
-      {/* Model Selector */}
+      {/* Provider Selector */}
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          AI Model
+          AI Provider
         </label>
         <div className="relative w-full max-w-md">
           <select
             value={selectedProvider}
-            onChange={(e) => onProviderChange(e.target.value)}
+            onChange={(e) => handleProviderChange(e.target.value)}
             className="w-full appearance-none px-3 py-2 pr-10 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
           >
             {providers.map((provider) => (
@@ -129,6 +148,32 @@ export function AISettingsPanel({
           </p>
         )}
       </div>
+
+      {/* Model Selector */}
+      {availableModels.length > 0 && onModelChange && (
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Model
+          </label>
+          <div className="relative w-full max-w-md">
+            <select
+              value={currentModel}
+              onChange={(e) => onModelChange(e.target.value)}
+              className="w-full appearance-none px-3 py-2 pr-10 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent cursor-pointer"
+            >
+              {availableModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name} {model.description && `- ${model.description}`}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={16}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Streaming Toggle */}
       <div className="flex items-center gap-3 max-w-md">

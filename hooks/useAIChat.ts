@@ -4,6 +4,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useState, useMemo, useCallback } from 'react';
 import { useApiKeys, useBilling, Message } from '@/components/AISettingsPanel';
+import { getDefaultModel } from '@/lib/models';
 
 interface UseAIChatOptions {
   /** API endpoint to call */
@@ -14,6 +15,18 @@ interface UseAIChatOptions {
 
 export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   const [selectedProvider, setSelectedProvider] = useState('openai');
+  const [selectedModel, setSelectedModel] = useState<string>(() =>
+    getDefaultModel('openai'),
+  );
+
+  // Reset model when provider changes
+  const handleProviderChange = useCallback(
+    (provider: string) => {
+      setSelectedProvider(provider);
+      setSelectedModel(getDefaultModel(provider));
+    },
+    [],
+  );
   const [inputValue, setInputValue] = useState('');
   const [useStreaming, setUseStreaming] = useState(true);
   const [nonStreamingMessages, setNonStreamingMessages] = useState<Message[]>(
@@ -41,6 +54,7 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
           body: {
             messages,
             provider: selectedProvider,
+            model: selectedModel,
             apiKey: apiKeys[selectedProvider],
             stream: true,
             ...(extraBody?.() ?? {}),
@@ -48,7 +62,7 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
           },
         }),
       }),
-    [endpoint, selectedProvider, apiKeys, extraBody],
+    [endpoint, selectedProvider, selectedModel, apiKeys, extraBody],
   );
 
   const {
@@ -72,7 +86,9 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   const streamingError =
     useChatError ||
     streamingErrorState ||
-    (status === 'error' ? new Error('An error occurred during streaming') : null);
+    (status === 'error'
+      ? new Error('An error occurred during streaming')
+      : null);
 
   const isStreamingLoading = status === 'streaming' || status === 'submitted';
   const isLoading = useStreaming ? isStreamingLoading : isNonStreamingLoading;
@@ -96,16 +112,17 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...nonStreamingMessages, userMessage].map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          provider: selectedProvider,
-          apiKey: apiKeys[selectedProvider],
-          stream: false,
-          ...(extraBody?.() ?? {}),
-        }),
+          body: JSON.stringify({
+            messages: [...nonStreamingMessages, userMessage].map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            provider: selectedProvider,
+            model: selectedModel,
+            apiKey: apiKeys[selectedProvider],
+            stream: false,
+            ...(extraBody?.() ?? {}),
+          }),
       });
 
       const data = await response.json();
@@ -136,6 +153,7 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     isLoading,
     nonStreamingMessages,
     selectedProvider,
+    selectedModel,
     apiKeys,
     endpoint,
     extraBody,
@@ -158,7 +176,13 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
         await handleNonStreamingSubmit();
       }
     },
-    [inputValue, isLoading, useStreaming, sendMessage, handleNonStreamingSubmit],
+    [
+      inputValue,
+      isLoading,
+      useStreaming,
+      sendMessage,
+      handleNonStreamingSubmit,
+    ],
   );
 
   // Use appropriate messages based on mode
@@ -180,7 +204,9 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   return {
     // State
     selectedProvider,
-    setSelectedProvider,
+    setSelectedProvider: handleProviderChange,
+    selectedModel,
+    setSelectedModel,
     inputValue,
     setInputValue,
     useStreaming,

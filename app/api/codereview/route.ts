@@ -12,28 +12,26 @@ import { z } from 'zod';
 import { readFile } from 'fs/promises';
 import { deductCredits, getCredits } from '@/lib/billing';
 import { NextResponse } from 'next/server';
+import { createDeepSeek } from '@ai-sdk/deepseek';
+import { getDefaultModel } from '@/lib/models';
 
 // Provider configurations - exported for reuse
 export const providerConfigs = {
   openai: {
     createProvider: (apiKey: string) => createOpenAI({ apiKey }),
-    defaultModel: 'gpt-4o',
+    defaultModel: getDefaultModel('openai'),
   },
   gemini: {
     createProvider: (apiKey: string) => createGoogleGenerativeAI({ apiKey }),
-    defaultModel: 'gemini-1.5-pro',
+    defaultModel: getDefaultModel('gemini'),
   },
   anthropic: {
     createProvider: (apiKey: string) => createAnthropic({ apiKey }),
-    defaultModel: 'claude-sonnet-4-20250514',
+    defaultModel: getDefaultModel('anthropic'),
   },
   deepseek: {
-    createProvider: (apiKey: string) =>
-      createOpenAI({
-        apiKey,
-        baseURL: 'https://api.deepseek.com/v1',
-      }),
-    defaultModel: 'deepseek-chat',
+    createProvider: (apiKey: string) => createDeepSeek({ apiKey }),
+    defaultModel: getDefaultModel('deepseek'),
   },
   qwen: {
     createProvider: (apiKey: string) =>
@@ -41,7 +39,15 @@ export const providerConfigs = {
         apiKey,
         baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
       }),
-    defaultModel: 'qwen-plus',
+    defaultModel: getDefaultModel('qwen'),
+  },
+  'vercel-ai-gateway': {
+    createProvider: (apiKey: string) =>
+      createOpenAI({
+        apiKey,
+        baseURL: 'https://ai-gateway.vercel.sh/v1',
+      }),
+    defaultModel: getDefaultModel('vercel-ai-gateway'),
   },
 };
 
@@ -72,6 +78,7 @@ export function getEnvApiKey(providerId: ProviderId): string | undefined {
     anthropic: 'ANTHROPIC_API_KEY',
     deepseek: 'DEEPSEEK_API_KEY',
     qwen: 'QWEN_API_KEY',
+    'vercel-ai-gateway': 'VERCEL_AI_GATEWAY_API_KEY',
   };
   return process.env[envKeys[providerId]];
 }
@@ -89,11 +96,13 @@ export async function POST(req: Request) {
       messages: rawMessages,
       provider: providerId = 'openai',
       apiKey,
+      model: requestedModel,
       stream = true, // Default to streaming
     }: {
       messages: UIMessage[];
       provider?: ProviderId;
       apiKey?: string;
+      model?: string;
       stream?: boolean;
     } = await req.json();
 
@@ -126,8 +135,10 @@ export async function POST(req: Request) {
     }
 
     const config = providerConfigs[providerId];
-    const providerInstance = config.createProvider(resolvedApiKey);
-    const modelName = config.defaultModel;
+    const provider = config.createProvider(resolvedApiKey);
+    // Use requested model or fall back to default
+    const modelName = requestedModel || config.defaultModel;
+    const model = provider(modelName);
 
     const systemPrompt = `You are a code reviewer.
 You will be given a file path and you will review the code in that file.`;
@@ -135,7 +146,7 @@ You will be given a file path and you will review the code in that file.`;
     if (stream) {
       // Streaming mode - use toUIMessageStreamResponse for proper error handling
       const result = streamText({
-        model: providerInstance(modelName),
+        model,
         system: systemPrompt,
         tools: codeTools,
         messages,
@@ -152,7 +163,7 @@ You will be given a file path and you will review the code in that file.`;
     } else {
       // Non-streaming mode - better for usage tracking
       const result = await generateText({
-        model: providerInstance(modelName),
+        model,
         system: systemPrompt,
         tools: codeTools,
         messages,
