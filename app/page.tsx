@@ -131,7 +131,7 @@ export default function Home() {
           />
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || !inputValue.trim()}
             className="flex h-12 w-fit items-center justify-center gap-2 rounded-md bg-blue-600 px-6 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {inputMode === 'file' ? (

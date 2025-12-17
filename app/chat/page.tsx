@@ -116,7 +116,7 @@ export default function ChatPage() {
             />
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !inputValue.trim()}
               className="flex h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-4 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Send size={16} />
