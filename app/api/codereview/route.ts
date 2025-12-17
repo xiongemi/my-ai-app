@@ -187,20 +187,42 @@ You will be given a file path and you will review the code in that file.`;
 
     if (stream) {
       // Streaming mode - use toUIMessageStreamResponse for proper error handling
+      // toUIMessageStreamResponse automatically handles tool calls and continues streaming
       const result = streamText({
         model,
         system: finalSystemPrompt,
         tools: codeTools,
         messages,
-        onFinish: ({ usage }) => {
+        onFinish: ({ usage, finishReason }) => {
+          console.log(
+            `[${providerId}] Stream finished. Reason: ${finishReason}, Tokens: ${usage.inputTokens}/${usage.outputTokens}`,
+          );
           deductCredits(
             modelName,
             usage.inputTokens ?? 0,
             usage.outputTokens ?? 0,
           );
         },
+        onStepFinish: ({ text, toolCalls, toolResults }) => {
+          if (toolCalls && toolCalls.length > 0) {
+            console.log(
+              `[${providerId}] Tool calls made: ${toolCalls.map((tc) => tc.toolName).join(', ')}`,
+            );
+          }
+          if (toolResults && toolResults.length > 0) {
+            console.log(
+              `[${providerId}] Tool results received: ${toolResults.length} results`,
+            );
+          }
+        },
       });
 
+      // toUIMessageStreamResponse handles tool calls automatically:
+      // 1. Streams tool call requests
+      // 2. Executes tools
+      // 3. Streams tool results back to model
+      // 4. Continues streaming model's response
+      // This should continue streaming even after tool calls
       return result.toUIMessageStreamResponse();
     } else {
       // Non-streaming mode - better for usage tracking

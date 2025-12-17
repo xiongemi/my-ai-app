@@ -2,6 +2,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createDeepSeek } from '@ai-sdk/deepseek';
+import { createQwen } from 'qwen-ai-provider';
 import { getDefaultModel } from '@/lib/models';
 
 // Provider configurations - exported for reuse
@@ -27,11 +28,7 @@ export const providerConfigs = {
     defaultModel: getDefaultModel('deepseek'),
   },
   qwen: {
-    createProvider: (apiKey: string) =>
-      createOpenAI({
-        apiKey,
-        baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      }),
+    createProvider: (apiKey: string) => createQwen({ apiKey }),
     defaultModel: getDefaultModel('qwen'),
   },
   'vercel-ai-gateway': {
