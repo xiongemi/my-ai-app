@@ -1,19 +1,10 @@
-import {
-  streamText,
-  generateText,
-  convertToModelMessages,
-  UIMessage,
-} from 'ai';
+import { UIMessage, stepCountIs } from 'ai';
 import { tool } from 'ai';
 import { z } from 'zod';
 import { readFile } from 'fs/promises';
-import { deductCredits, getCredits } from '@/lib/billing';
 import { NextResponse } from 'next/server';
-import {
-  providerConfigs,
-  ProviderId,
-  getEnvApiKey,
-} from '@/lib/providers';
+import { handleAIRequest } from '@/lib/ai-handler';
+import { ProviderId } from '@/lib/providers';
 
 // Shared tools
 export const codeTools = {
@@ -104,13 +95,6 @@ export const codeTools = {
 
 export async function POST(req: Request) {
   try {
-    if (getCredits() <= 0) {
-      return NextResponse.json(
-        { error: 'Insufficient credits' },
-        { status: 402 },
-      );
-    }
-
     const {
       messages: rawMessages,
       provider: providerId = 'openai',
@@ -127,132 +111,25 @@ export async function POST(req: Request) {
       systemPrompt?: string;
     } = await req.json();
 
-    // Validate messages
-    if (!rawMessages || !Array.isArray(rawMessages)) {
-      return NextResponse.json(
-        { error: 'Messages are required and must be an array' },
-        { status: 400 },
-      );
-    }
-
-    // Convert messages to ModelMessage[] format
-    // Streaming sends UIMessage[] format, non-streaming sends {role, content} format
-    const messages = stream
-      ? convertToModelMessages(rawMessages as UIMessage[])
-      : (rawMessages as Array<{ role: string; content: string }>).map((m) => ({
-          role: m.role as 'user' | 'assistant' | 'system',
-          content: m.content,
-        }));
-
-    // Validate provider
-    if (!providerConfigs[providerId]) {
-      return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
-    }
-
-    const config = providerConfigs[providerId];
-    
-    // Log for debugging - helps identify provider and key issues
-    console.log(
-      `[API] Provider: ${providerId}, Model: ${requestedModel || config.defaultModel}, Stream: ${stream}, Has API Key: ${!!apiKey}`,
-    );
-    
-    // Get API key from request or environment
-    // IMPORTANT: Never fall back to a different provider's key
-    const resolvedApiKey = apiKey || getEnvApiKey(providerId);
-
-    if (!resolvedApiKey) {
-      return NextResponse.json(
-        {
-          error: `No API key provided for ${providerId}. Please add it in Settings.`,
-        },
-        { status: 400 },
-      );
-    }
-
-    // Log for debugging - helps identify if wrong key is being used
-    console.log(
-      `[${providerId}] Requested model: ${requestedModel || config.defaultModel}, API key source: ${apiKey ? 'request body' : 'environment'}`,
-    );
-
-    const provider = config.createProvider(resolvedApiKey);
-    // Use requested model or fall back to default
-    const modelName = requestedModel || config.defaultModel;
-    const model = provider(modelName);
-
-    // Use custom system prompt or default
-    const finalSystemPrompt =
-      systemPrompt ||
-      `You are a code reviewer.
-You will be given a file path and you will review the code in that file.`;
-
-    if (stream) {
-      // Streaming mode - use toUIMessageStreamResponse for proper error handling
-      // toUIMessageStreamResponse automatically handles tool calls and continues streaming
-      const result = streamText({
-        model,
-        system: finalSystemPrompt,
-        tools: codeTools,
-        messages,
-        onFinish: ({ usage, finishReason }) => {
-          console.log(
-            `[${providerId}] Stream finished. Reason: ${finishReason}, Tokens: ${usage.inputTokens}/${usage.outputTokens}`,
-          );
-          deductCredits(
-            modelName,
-            usage.inputTokens ?? 0,
-            usage.outputTokens ?? 0,
-          );
-        },
-        onStepFinish: ({ text, toolCalls, toolResults }) => {
-          if (toolCalls && toolCalls.length > 0) {
-            console.log(
-              `[${providerId}] Tool calls made: ${toolCalls.map((tc) => tc.toolName).join(', ')}`,
-            );
-          }
-          if (toolResults && toolResults.length > 0) {
-            console.log(
-              `[${providerId}] Tool results received: ${toolResults.length} results`,
-            );
-          }
-        },
-      });
-
-      // toUIMessageStreamResponse handles tool calls automatically:
-      // 1. Streams tool call requests
-      // 2. Executes tools
-      // 3. Streams tool results back to model
-      // 4. Continues streaming model's response
-      // This should continue streaming even after tool calls
-      return result.toUIMessageStreamResponse();
-    } else {
-      // Non-streaming mode - better for usage tracking
-      const result = await generateText({
-        model,
-        system: finalSystemPrompt,
-        tools: codeTools,
-        messages,
-      });
-
-      // Accurate usage tracking with non-streaming
-      // AI SDK v5 uses inputTokens/outputTokens
-      const promptTokens = result.usage.inputTokens ?? 0;
-      const completionTokens = result.usage.outputTokens ?? 0;
-      const billingResult = deductCredits(
-        modelName,
-        promptTokens,
-        completionTokens,
-      );
-
-      return NextResponse.json({
-        text: result.text,
-        usage: {
-          promptTokens,
-          completionTokens,
-          totalTokens: promptTokens + completionTokens,
-        },
-        billing: billingResult,
-      });
-    }
+    // Use handleAIRequest from the shared library, with codereview-specific options
+    return handleAIRequest({
+      messages: rawMessages,
+      provider: providerId,
+      apiKey,
+      model: requestedModel,
+      stream,
+      systemPrompt:
+        systemPrompt ||
+        `You are a code reviewer.
+You will be given a file path and you will review the code in that file.`,
+      tools: codeTools, // Always enable tools for code review
+      // Allow up to 20 steps to handle complex reviews with multiple tool calls
+      // This covers: reading PR, reading multiple files, and generating the review
+      stopWhen: stepCountIs(20),
+      enableUsageMetadata: true, // Include usage in streaming response for UI display
+      enableStepLogging: true, // Log tool calls for debugging
+      logPrefix: 'CodeReview',
+    });
   } catch (error) {
     console.error('Code review error:', error);
     const message =
