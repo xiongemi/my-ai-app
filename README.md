@@ -28,28 +28,32 @@ A Next.js application that uses AI to review code files and GitHub pull requests
 
 ### Prerequisites
 
-- Node.js 20+ 
+- Node.js 20+
 - pnpm (recommended) or npm/yarn
 
 ### Installation
 
 1. Clone the repository:
+
 ```bash
 git clone <repository-url>
 cd my-ai-app
 ```
 
 2. Install dependencies:
+
 ```bash
 pnpm install
 ```
 
 3. Set up environment variables (optional - you can also add API keys in Settings):
+
 ```bash
 cp .env.example .env
 ```
 
 Add your API keys:
+
 ```env
 OPENAI_API_KEY=your_key_here
 GOOGLE_GENERATIVE_AI_API_KEY=your_key_here
@@ -60,6 +64,7 @@ VERCEL_AI_GATEWAY_API_KEY=your_key_here
 ```
 
 4. Run the development server:
+
 ```bash
 pnpm dev
 ```
@@ -120,9 +125,11 @@ my-ai-app/
 ## API Routes
 
 ### `/api/codereview`
+
 Code review endpoint with file reading and PR reading tools.
 
 **Request Body:**
+
 ```json
 {
   "messages": [...],
@@ -135,9 +142,11 @@ Code review endpoint with file reading and PR reading tools.
 ```
 
 ### `/api/chat`
+
 General chat endpoint with optional file reading tools.
 
 **Request Body:**
+
 ```json
 {
   "messages": [...],
@@ -151,6 +160,7 @@ General chat endpoint with optional file reading tools.
 ```
 
 ### `/api/billing`
+
 Get current credit balance and usage history.
 
 ## Available Scripts
@@ -167,12 +177,14 @@ Get current credit balance and usage history.
 ## Testing
 
 The project includes Jest tests for:
+
 - Model utilities (`lib/models.ts`)
 - Provider configurations (`lib/providers.ts`)
 - Markdown renderer component
 - Theme switcher component
 
 Run tests:
+
 ```bash
 pnpm test
 ```
@@ -181,13 +193,13 @@ pnpm test
 
 See [`lib/models.json`](./lib/models.json) for the complete list of supported models for each provider.
 
-| Provider | Notes |
-|----------|-------|
-| OpenAI | Requires API key |
-| Google Gemini | Requires API key |
-| Anthropic | Requires API key |
-| DeepSeek | Requires API key |
-| Qwen | Requires API key |
+| Provider          | Notes                    |
+| ----------------- | ------------------------ |
+| OpenAI            | Requires API key         |
+| Google Gemini     | Requires API key         |
+| Anthropic         | Requires API key         |
+| DeepSeek          | Requires API key         |
+| Qwen              | Requires API key         |
 | Vercel AI Gateway | Requires gateway API key |
 
 ## Features in Detail

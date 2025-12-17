@@ -26,7 +26,7 @@ body {
 
 .markdown-content h1 {
   @apply text-2xl font-bold text-zinc-900 dark:text-zinc-100;
-  border-bottom: 1px solid rgb(228 228 231 / 0.5)
+  border-bottom: 1px solid rgb(228 228 231 / 0.5);
 }
 
 .markdown-content h2 {

@@ -115,7 +115,8 @@ export function VercelGatewayFallbackModels({
                   <option value="">Select a model to add...</option>
                   {availableToAdd.map((model) => (
                     <option key={model.id} value={model.id}>
-                      {model.name} {model.description && `- ${model.description}`}
+                      {model.name}{' '}
+                      {model.description && `- ${model.description}`}
                     </option>
                   ))}
                 </select>
@@ -135,7 +136,8 @@ export function VercelGatewayFallbackModels({
 
           {/* Info */}
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">
-            Fallback models are used in order if the primary model is unavailable.
+            Fallback models are used in order if the primary model is
+            unavailable.
           </p>
         </div>
       )}
@@ -175,4 +177,3 @@ export function useVercelGatewayFallbackModels(): [
 
   return [fallbackModels, updateFallbackModels];
 }
-
