@@ -1,12 +1,13 @@
 {
   "openai": {
-    "defaultModel": "gpt-4o",
+    "defaultModel": "gpt-5-mini",
     "models": [
-      { "id": "gpt-4o", "name": "GPT-4o", "description": "Most capable model" },
-      { "id": "gpt-4o-mini", "name": "GPT-4o Mini", "description": "Faster and cheaper" },
-      { "id": "gpt-4-turbo", "name": "GPT-4 Turbo", "description": "Previous generation" },
-      { "id": "gpt-4", "name": "GPT-4", "description": "Standard GPT-4" },
-      { "id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "description": "Fast and affordable" }
+      { "id": "gpt-5.2", "name": "GPT-5.2", "description": "The best model for coding and agentic tasks across industries" },
+      { "id": "gpt-5.2-pro", "name": "GPT-5.2 Pro", "description": "The smartest and most precise model" },
+      { "id": "gpt-5-mini", "name": "GPT-5 Mini", "description": "A faster, cheaper version of GPT-5 for well-defined tasks" },
+      { "id": "gpt-4.1", "name": "GPT-4.1", "description": "Enhanced GPT-4 model" },
+      { "id": "gpt-4.1-mini", "name": "GPT-4.1 Mini", "description": "Faster GPT-4.1 variant" },
+      { "id": "gpt-4.1-nano", "name": "GPT-4.1 Nano", "description": "Lightweight GPT-4.1 variant" }
     ]
   },
   "gemini": {

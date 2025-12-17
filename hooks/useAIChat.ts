@@ -2,7 +2,7 @@
 
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useApiKeys, useBilling, Message } from '@/components/AISettingsPanel';
 import { getDefaultModel } from '@/lib/models';
 
@@ -22,8 +22,9 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   // Reset model when provider changes
   const handleProviderChange = useCallback(
     (provider: string) => {
+      const defaultModel = getDefaultModel(provider);
       setSelectedProvider(provider);
-      setSelectedModel(getDefaultModel(provider));
+      setSelectedModel(defaultModel);
     },
     [],
   );
@@ -43,27 +44,56 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   const apiKeys = useApiKeys();
   const { billingData, refetch: refetchBilling } = useBilling();
 
+  // Use refs to store latest values so the transport callback always reads current values
+  const providerRef = useRef(selectedProvider);
+  const modelRef = useRef(selectedModel);
+  const apiKeysRef = useRef(apiKeys);
+  const extraBodyRef = useRef(extraBody);
+
+  // Update refs when values change
+  useEffect(() => {
+    providerRef.current = selectedProvider;
+    modelRef.current = selectedModel;
+    apiKeysRef.current = apiKeys;
+    extraBodyRef.current = extraBody;
+  }, [selectedProvider, selectedModel, apiKeys, extraBody]);
+
   // Use DefaultChatTransport with prepareSendMessagesRequest to ensure correct format
   // DefaultChatTransport works with toUIMessageStreamResponse() which properly handles errors
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: endpoint,
-        // Use prepareSendMessagesRequest to explicitly include messages in the request body
-        prepareSendMessagesRequest: ({ messages, body: requestBody }) => ({
+  const transport = useMemo(() => {
+    console.log(
+      `[Transport Created] Provider: ${selectedProvider}, Model: ${selectedModel}`,
+    );
+    
+    return new DefaultChatTransport({
+      api: endpoint,
+      // Use prepareSendMessagesRequest to explicitly include messages in the request body
+      prepareSendMessagesRequest: ({ messages, body: requestBody }) => {
+        // Read current values from refs to ensure we always use the latest
+        const currentProvider = providerRef.current;
+        const currentModel = modelRef.current;
+        const currentApiKeys = apiKeysRef.current;
+        const providerApiKey = currentApiKeys[currentProvider];
+        
+        // Debug logging for all providers
+        console.log(
+          `[Frontend Streaming] Provider: ${currentProvider}, Model: ${currentModel}, API Key: ${providerApiKey ? providerApiKey.substring(0, 10) + '...' : 'NOT SET'}`,
+        );
+        
+        return {
           body: {
             messages,
-            provider: selectedProvider,
-            model: selectedModel,
-            apiKey: apiKeys[selectedProvider],
+            provider: currentProvider,
+            model: currentModel,
+            apiKey: providerApiKey, // Only send if it exists
             stream: true,
-            ...(extraBody?.() ?? {}),
+            ...(extraBodyRef.current?.() ?? {}),
             ...requestBody,
           },
-        }),
-      }),
-    [endpoint, selectedProvider, selectedModel, apiKeys, extraBody],
-  );
+        };
+      },
+    });
+  }, [endpoint, selectedProvider, selectedModel, apiKeys, extraBody]);
 
   const {
     messages: streamingMessages,
@@ -109,20 +139,27 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     setNonStreamingError(null);
 
     try {
+      const requestBody = {
+        messages: [...nonStreamingMessages, userMessage].map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+        provider: selectedProvider,
+        model: selectedModel,
+        apiKey: apiKeys[selectedProvider],
+        stream: false,
+        ...(extraBody?.() ?? {}),
+      };
+      
+      // Debug logging for non-streaming requests
+      console.log(
+        `[Frontend Non-Streaming] Provider: ${selectedProvider}, Model: ${selectedModel}, API Key: ${apiKeys[selectedProvider] ? apiKeys[selectedProvider].substring(0, 10) + '...' : 'NOT SET'}`,
+      );
+      
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            messages: [...nonStreamingMessages, userMessage].map((m) => ({
-              role: m.role,
-              content: m.content,
-            })),
-            provider: selectedProvider,
-            model: selectedModel,
-            apiKey: apiKeys[selectedProvider],
-            stream: false,
-            ...(extraBody?.() ?? {}),
-          }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
