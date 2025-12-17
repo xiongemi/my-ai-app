@@ -102,12 +102,14 @@ export async function POST(req: Request) {
       apiKey,
       model: requestedModel,
       stream = true, // Default to streaming
+      systemPrompt, // Custom system prompt
     }: {
       messages: UIMessage[] | Array<{ role: string; content: string }>;
       provider?: ProviderId;
       apiKey?: string;
       model?: string;
       stream?: boolean;
+      systemPrompt?: string;
     } = await req.json();
 
     // Validate messages
@@ -162,14 +164,17 @@ export async function POST(req: Request) {
     const modelName = requestedModel || config.defaultModel;
     const model = provider(modelName);
 
-    const systemPrompt = `You are a code reviewer.
+    // Use custom system prompt or default
+    const finalSystemPrompt =
+      systemPrompt ||
+      `You are a code reviewer.
 You will be given a file path and you will review the code in that file.`;
 
     if (stream) {
       // Streaming mode - use toUIMessageStreamResponse for proper error handling
       const result = streamText({
         model,
-        system: systemPrompt,
+        system: finalSystemPrompt,
         tools: codeTools,
         messages,
         onFinish: ({ usage }) => {
@@ -186,7 +191,7 @@ You will be given a file path and you will review the code in that file.`;
       // Non-streaming mode - better for usage tracking
       const result = await generateText({
         model,
-        system: systemPrompt,
+        system: finalSystemPrompt,
         tools: codeTools,
         messages,
       });

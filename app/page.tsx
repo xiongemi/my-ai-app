@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Code, GitPullRequest, AlertCircle, X } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Code, GitPullRequest, AlertCircle, X, Sparkles } from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 
@@ -9,6 +9,16 @@ type InputMode = 'file' | 'pr';
 
 export default function Home() {
   const [inputMode, setInputMode] = useState<InputMode>('file');
+  const [systemPrompt, setSystemPrompt] = useState(
+    'You are a code reviewer. You will be given a file path and you will review the code in that file.',
+  );
+  const [showSettings, setShowSettings] = useState(false);
+
+  // Use useCallback so the function reference is stable
+  const getExtraBody = useCallback(
+    () => ({ systemPrompt }),
+    [systemPrompt],
+  );
 
   const {
     selectedProvider,
@@ -24,7 +34,10 @@ export default function Home() {
     handleSubmit,
     error,
     clearError,
-  } = useAIChat({ endpoint: '/api/codereview' });
+  } = useAIChat({
+    endpoint: '/api/codereview',
+    extraBody: getExtraBody,
+  });
 
   const currentProvider = providers.find((p) => p.id === selectedProvider);
 
@@ -50,6 +63,35 @@ export default function Home() {
             useStreaming={useStreaming}
             onStreamingChange={setUseStreaming}
           />
+
+          {/* Settings Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowSettings(!showSettings)}
+            className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white w-fit"
+          >
+            <Sparkles size={14} />
+            {showSettings ? 'Hide' : 'Show'} Review Settings
+          </button>
+
+          {/* Collapsible Settings */}
+          {showSettings && (
+            <div className="flex flex-col gap-4 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
+              {/* System Prompt */}
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  System Prompt
+                </label>
+                <textarea
+                  value={systemPrompt}
+                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  placeholder="Enter a custom system prompt for code review..."
+                  rows={3}
+                  className="w-full p-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 resize-none"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Input Mode Toggle */}
           <div className="flex gap-2">

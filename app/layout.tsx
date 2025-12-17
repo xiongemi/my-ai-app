@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import { ThemeProvider } from 'next-themes';
 import ThemeSwitcher from '../components/ThemeSwitcher';
 import Link from 'next/link';
-import { Settings } from 'lucide-react';
+import { Code, MessageCircle, Settings } from 'lucide-react';
 import './globals.css';
 
 const geistSans = Geist({
@@ -37,7 +37,21 @@ export default function RootLayout({
               <h1 className="text-2xl font-bold text-black dark:text-white">
                 <Link href="/">AI Agent</Link>
               </h1>
-              <div className="flex items-center">
+              <div className="flex items-center gap-4">
+                <Link
+                  href="/"
+                  className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
+                >
+                  <Code size={16} />
+                  Code Review
+                </Link>
+                <Link
+                  href="/chat"
+                  className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
+                >
+                  <MessageCircle size={16} />
+                  Chat
+                </Link>
                 <ThemeSwitcher />
                 <Link
                   href="/settings"
