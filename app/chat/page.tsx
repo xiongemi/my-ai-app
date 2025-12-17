@@ -1,167 +1,39 @@
 'use client';
 
-import { useChat } from '@ai-sdk/react';
 import { useState, useMemo } from 'react';
 import { MessageCircle, Send, Sparkles } from 'lucide-react';
-import {
-  AISettingsPanel,
-  useApiKeys,
-  useBilling,
-  providers,
-  Message,
-} from '@/components/AISettingsPanel';
+import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
+import { useAIChat } from '@/hooks/useAIChat';
 
 export default function ChatPage() {
-  const [selectedProvider, setSelectedProvider] = useState('openai');
-  const [inputValue, setInputValue] = useState('');
-  const [useStreaming, setUseStreaming] = useState(true);
-  const [nonStreamingMessages, setNonStreamingMessages] = useState<Message[]>(
-    [],
-  );
-  const [isNonStreamingLoading, setIsNonStreamingLoading] = useState(false);
   const [systemPrompt, setSystemPrompt] = useState(
     'You are a helpful AI assistant.',
   );
   const [showSettings, setShowSettings] = useState(false);
   const [enableTools, setEnableTools] = useState(false);
 
-  const apiKeys = useApiKeys();
-  const { billingData, refetch: refetchBilling } = useBilling();
-
-  // Create a custom transport to inject provider, apiKey, and systemPrompt (for streaming)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const transport = useMemo(
-    () =>
-      ({
-        sendMessages: async ({
-          messages,
-          abortSignal,
-        }: {
-          messages: Array<{
-            role: string;
-            parts: Array<{ type: string; text?: string }>;
-          }>;
-          abortSignal?: AbortSignal;
-        }) => {
-          const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: messages.map((m) => ({
-                role: m.role,
-                content: m.parts?.find((p) => p.type === 'text')?.text || '',
-              })),
-              provider: selectedProvider,
-              apiKey: apiKeys[selectedProvider],
-              systemPrompt,
-              enableTools,
-              stream: true,
-            }),
-            signal: abortSignal,
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          return response.body!;
-        },
-        reconnectToStream: async () => {
-          return undefined;
-        },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      }) as any,
-    [selectedProvider, apiKeys, systemPrompt, enableTools],
+  // Memoize extraBody to prevent infinite re-renders
+  const extraBody = useMemo(
+    () => ({ systemPrompt, enableTools }),
+    [systemPrompt, enableTools],
   );
 
   const {
-    messages: streamingMessages,
-    status,
-    sendMessage,
-  } = useChat({
-    transport,
-    onFinish: () => {
-      refetchBilling();
-    },
+    selectedProvider,
+    setSelectedProvider,
+    inputValue,
+    setInputValue,
+    useStreaming,
+    setUseStreaming,
+    isLoading,
+    messages,
+    handleSubmit,
+  } = useAIChat({
+    endpoint: '/api/chat',
+    extraBody,
   });
 
-  const isStreamingLoading = status === 'streaming' || status === 'submitted';
-  const isLoading = useStreaming ? isStreamingLoading : isNonStreamingLoading;
-
-  // Non-streaming submit handler
-  const handleNonStreamingSubmit = async () => {
-    if (!inputValue.trim() || isLoading) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: inputValue,
-    };
-
-    setNonStreamingMessages((prev) => [...prev, userMessage]);
-    setInputValue('');
-    setIsNonStreamingLoading(true);
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...nonStreamingMessages, userMessage].map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          provider: selectedProvider,
-          apiKey: apiKeys[selectedProvider],
-          systemPrompt,
-          enableTools,
-          stream: false,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.text,
-        usage: data.usage,
-      };
-
-      setNonStreamingMessages((prev) => [...prev, assistantMessage]);
-      refetchBilling();
-    } catch (error) {
-      console.error('Error:', error);
-    } finally {
-      setIsNonStreamingLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputValue.trim() || isLoading) return;
-
-    if (useStreaming) {
-      await sendMessage({
-        role: 'user',
-        parts: [{ type: 'text', text: inputValue }],
-      });
-      setInputValue('');
-    } else {
-      await handleNonStreamingSubmit();
-    }
-  };
-
   const currentProvider = providers.find((p) => p.id === selectedProvider);
-
-  // Use appropriate messages based on mode
-  const displayMessages = useStreaming
-    ? streamingMessages
-    : nonStreamingMessages;
 
   return (
     <div className="w-full max-w-3xl mx-auto py-16 px-4 sm:px-6 lg:px-8">
@@ -248,7 +120,7 @@ export default function ChatPage() {
       </form>
 
       <div className="flex flex-col-reverse w-full mt-8 gap-4">
-        {displayMessages.map((m) => (
+        {messages.map((m) => (
           <div
             key={m.id}
             className={`whitespace-pre-wrap p-4 rounded-lg border ${
