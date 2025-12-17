@@ -11,6 +11,9 @@ importers:
       '@ai-sdk/anthropic':
         specifier: ^2.0.56
         version: 2.0.56(zod@4.2.1)
+      '@ai-sdk/deepseek':
+        specifier: ^1.0.32
+        version: 1.0.32(zod@4.2.1)
       '@ai-sdk/google':
         specifier: ^2.0.47
         version: 2.0.47(zod@4.2.1)
@@ -60,6 +63,9 @@ importers:
       eslint-config-next:
         specifier: 16.0.10
         version: 16.0.10(@typescript-eslint/parser@8.50.0(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3))(eslint@9.39.2(jiti@2.6.1))(typescript@5.9.3)
+      prettier:
+        specifier: ^3.7.4
+        version: 3.7.4
       tailwindcss:
         specifier: ^4
         version: 4.1.18
@@ -71,6 +77,12 @@ packages:
 
   '@ai-sdk/anthropic@2.0.56':
     resolution: {integrity: sha512-XHJKu0Yvfu9SPzRfsAFESa+9T7f2YJY6TxykKMfRsAwpeWAiX/Gbx5J5uM15AzYC3Rw8tVP3oH+j7jEivENirQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/deepseek@1.0.32':
+    resolution: {integrity: sha512-DDNZSZn6OuExVBJBAWdk3VeyQPH+pYwSykixePhzll9EnT3aakapMYr5gjw3wMl+eZ0tLplythHL1TfIehUZ0g==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -1712,6 +1724,11 @@ packages:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
     engines: {node: '>= 0.8.0'}
 
+  prettier@3.7.4:
+    resolution: {integrity: sha512-v6UNi1+3hSlVvv8fSaoUbggEM5VErKmmpGA7Pl3HF8V6uKY7rvClBOJlH6yNwQtfTueNkGVpOv/mtWL9L4bgRA==}
+    engines: {node: '>=14'}
+    hasBin: true
+
   prop-types@15.8.1:
     resolution: {integrity: sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==}
 
@@ -2028,6 +2045,12 @@ packages:
 snapshots:
 
   '@ai-sdk/anthropic@2.0.56(zod@4.2.1)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.0
+      '@ai-sdk/provider-utils': 3.0.19(zod@4.2.1)
+      zod: 4.2.1
+
+  '@ai-sdk/deepseek@1.0.32(zod@4.2.1)':
     dependencies:
       '@ai-sdk/provider': 2.0.0
       '@ai-sdk/provider-utils': 3.0.19(zod@4.2.1)
@@ -3776,6 +3799,8 @@ snapshots:
       source-map-js: 1.2.1
 
   prelude-ls@1.2.1: {}
+
+  prettier@3.7.4: {}
 
   prop-types@15.8.1:
     dependencies:
