@@ -20,13 +20,13 @@ body {
 }
 
 /* Markdown content styles */
-.markdown-content {
-  @apply text-zinc-700 dark:text-zinc-300;
+.markdown-content * {
+  line-height: 1;
 }
 
 .markdown-content h1 {
   @apply text-2xl font-bold text-zinc-900 dark:text-zinc-100;
-  border-bottom: 1px solid rgb(228 228 231 / 0.5);
+  border-bottom: 1px solid rgb(228 228 231 / 0.5)
 }
 
 .markdown-content h2 {
@@ -61,7 +61,7 @@ body {
 }
 
 .markdown-content blockquote {
-  @apply border-l-4 border-zinc-300 dark:border-zinc-700 pl-4 italic my-4 text-zinc-600 dark:text-zinc-400;
+  @apply border-l-4 border-zinc-300 dark:border-zinc-700 pl-4 italic text-zinc-600 dark:text-zinc-400;
 }
 
 .markdown-content code {
@@ -69,7 +69,8 @@ body {
 }
 
 .markdown-content pre {
-  @apply bg-zinc-100 dark:bg-zinc-800 p-4 rounded-lg overflow-x-auto my-4;
+  @apply bg-zinc-100 dark:bg-zinc-800 p-3 rounded-lg overflow-x-auto;
+  margin: 0;
 }
 
 .markdown-content pre code {
@@ -89,11 +90,11 @@ body {
 }
 
 .markdown-content hr {
-  @apply border-zinc-300 dark:border-zinc-700 my-6;
+  @apply border-zinc-300 dark:border-zinc-700;
 }
 
 .markdown-content table {
-  @apply w-full border-collapse my-4;
+  @apply w-full border-collapse;
 }
 
 .markdown-content th,
@@ -106,5 +107,5 @@ body {
 }
 
 .markdown-content img {
-  @apply max-w-full h-auto rounded-lg my-4;
+  @apply max-w-full h-auto rounded-lg;
 }
