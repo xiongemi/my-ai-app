@@ -9,8 +9,8 @@ import {
   providerConfigs,
   ProviderId,
   getEnvApiKey,
-  codeTools,
-} from '@/app/api/codereview/route';
+} from '@/lib/providers';
+import { codeTools } from '@/app/api/codereview/route';
 import { deductCredits, getCredits } from '@/lib/billing';
 
 export async function POST(req: Request) {

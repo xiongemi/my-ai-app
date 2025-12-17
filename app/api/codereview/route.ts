@@ -4,58 +4,16 @@ import {
   convertToModelMessages,
   UIMessage,
 } from 'ai';
-import { createOpenAI } from '@ai-sdk/openai';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { createAnthropic } from '@ai-sdk/anthropic';
 import { tool } from 'ai';
 import { z } from 'zod';
 import { readFile } from 'fs/promises';
 import { deductCredits, getCredits } from '@/lib/billing';
 import { NextResponse } from 'next/server';
-import { createDeepSeek } from '@ai-sdk/deepseek';
-import { getDefaultModel } from '@/lib/models';
-
-// Provider configurations - exported for reuse
-export const providerConfigs = {
-  openai: {
-    createProvider: (apiKey: string) => createOpenAI({ apiKey }),
-    defaultModel: getDefaultModel('openai'),
-  },
-  gemini: {
-    createProvider: (apiKey: string) => createGoogleGenerativeAI({ apiKey }),
-    defaultModel: getDefaultModel('gemini'),
-  },
-  anthropic: {
-    createProvider: (apiKey: string) => createAnthropic({ apiKey }),
-    defaultModel: getDefaultModel('anthropic'),
-  },
-  deepseek: {
-    createProvider: (apiKey: string) =>
-      createDeepSeek({
-        apiKey,
-        baseURL: 'https://api.deepseek.com',
-      }),
-    defaultModel: getDefaultModel('deepseek'),
-  },
-  qwen: {
-    createProvider: (apiKey: string) =>
-      createOpenAI({
-        apiKey,
-        baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-      }),
-    defaultModel: getDefaultModel('qwen'),
-  },
-  'vercel-ai-gateway': {
-    createProvider: (apiKey: string) =>
-      createOpenAI({
-        apiKey,
-        baseURL: 'https://ai-gateway.vercel.sh/v1',
-      }),
-    defaultModel: getDefaultModel('vercel-ai-gateway'),
-  },
-};
-
-export type ProviderId = keyof typeof providerConfigs;
+import {
+  providerConfigs,
+  ProviderId,
+  getEnvApiKey,
+} from '@/lib/providers';
 
 // Shared tools
 export const codeTools = {
@@ -74,18 +32,6 @@ export const codeTools = {
     },
   }),
 };
-
-export function getEnvApiKey(providerId: ProviderId): string | undefined {
-  const envKeys: Record<ProviderId, string> = {
-    openai: 'OPENAI_API_KEY',
-    gemini: 'GOOGLE_GENERATIVE_AI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-    deepseek: 'DEEPSEEK_API_KEY',
-    qwen: 'QWEN_API_KEY',
-    'vercel-ai-gateway': 'VERCEL_AI_GATEWAY_API_KEY',
-  };
-  return process.env[envKeys[providerId]];
-}
 
 export async function POST(req: Request) {
   try {
