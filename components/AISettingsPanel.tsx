@@ -96,7 +96,7 @@ export function AISettingsPanel({
         <p className="text-lg leading-8 text-zinc-600 dark:text-zinc-400">
           Total Cost:{' '}
           <span className="font-semibold text-black dark:text-white">
-            ${billingData.totalCost.toFixed(4)}
+            ${billingData?.totalCost?.toFixed(4) ?? 0}
           </span>
         </p>
       )}

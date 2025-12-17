@@ -1,4 +1,4 @@
-import { ModelMessage, streamText, generateText } from 'ai';
+import { streamText, generateText, convertToModelMessages, UIMessage } from 'ai';
 import { NextResponse } from 'next/server';
 import {
   providerConfigs,
@@ -17,20 +17,31 @@ export async function POST(req: Request) {
   }
 
   const {
-    messages,
+    messages: rawMessages,
     provider: providerId = 'openai',
     apiKey,
     stream = true,
     systemPrompt, // Custom system prompt
     enableTools = false, // Whether to enable file reading tools
   }: {
-    messages: ModelMessage[];
+    messages: UIMessage[];
     provider?: ProviderId;
     apiKey?: string;
     stream?: boolean;
     systemPrompt?: string;
     enableTools?: boolean;
   } = await req.json();
+
+  // Validate messages
+  if (!rawMessages || !Array.isArray(rawMessages)) {
+    return NextResponse.json(
+      { error: 'Messages are required and must be an array' },
+      { status: 400 },
+    );
+  }
+
+  // Convert UIMessage[] (from useChat) to ModelMessage[] (for generateText/streamText)
+  const messages = convertToModelMessages(rawMessages);
 
   // Validate provider
   if (!providerConfigs[providerId]) {

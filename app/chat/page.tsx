@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { MessageCircle, Send, Sparkles } from 'lucide-react';
+import { MessageCircle, Send, Sparkles, AlertCircle, X } from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 
@@ -28,6 +28,8 @@ export default function ChatPage() {
     isLoading,
     messages,
     handleSubmit,
+    error,
+    clearError,
   } = useAIChat({
     endpoint: '/api/chat',
     extraBody: getExtraBody,
@@ -118,6 +120,28 @@ export default function ChatPage() {
           </div>
         </div>
       </form>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="mt-4 p-4 rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 flex items-start gap-3">
+          <AlertCircle
+            size={20}
+            className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
+          />
+          <div className="flex-1">
+            <p className="font-medium text-red-800 dark:text-red-200">Error</p>
+            <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+              {error.message}
+            </p>
+          </div>
+          <button
+            onClick={clearError}
+            className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-col-reverse w-full mt-8 gap-4">
         {messages.map((m) => (

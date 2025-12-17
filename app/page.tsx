@@ -1,10 +1,15 @@
 'use client';
 
-import { Code } from 'lucide-react';
+import { useState } from 'react';
+import { Code, GitPullRequest, AlertCircle, X } from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 
+type InputMode = 'file' | 'pr';
+
 export default function Home() {
+  const [inputMode, setInputMode] = useState<InputMode>('file');
+
   const {
     selectedProvider,
     setSelectedProvider,
@@ -15,6 +20,8 @@ export default function Home() {
     isLoading,
     messages,
     handleSubmit,
+    error,
+    clearError,
   } = useAIChat({ endpoint: '/api/codereview' });
 
   const currentProvider = providers.find((p) => p.id === selectedProvider);
@@ -40,10 +47,42 @@ export default function Home() {
             onStreamingChange={setUseStreaming}
           />
 
+          {/* Input Mode Toggle */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setInputMode('file')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                inputMode === 'file'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+              }`}
+            >
+              <Code size={14} />
+              File Path
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputMode('pr')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                inputMode === 'pr'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+              }`}
+            >
+              <GitPullRequest size={14} />
+              PR Link
+            </button>
+          </div>
+
           <input
             className="w-full max-w-md p-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400"
             value={inputValue}
-            placeholder="Enter file path..."
+            placeholder={
+              inputMode === 'file'
+                ? 'Enter file path...'
+                : 'Enter GitHub PR URL (e.g., https://github.com/owner/repo/pull/123)'
+            }
             onChange={(e) => setInputValue(e.target.value)}
           />
           <button
@@ -51,11 +90,35 @@ export default function Home() {
             disabled={isLoading}
             className="flex h-12 w-fit items-center justify-center gap-2 rounded-md bg-blue-600 px-6 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Code size={16} />
+            {inputMode === 'file' ? <Code size={16} /> : <GitPullRequest size={16} />}
             {isLoading ? 'Reviewing...' : 'Review Code'}
           </button>
         </div>
       </form>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="mt-4 p-4 rounded-lg border border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950 flex items-start gap-3">
+          <AlertCircle
+            size={20}
+            className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5"
+          />
+          <div className="flex-1">
+            <p className="font-medium text-red-800 dark:text-red-200">
+              Error
+            </p>
+            <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+              {error.message}
+            </p>
+          </div>
+          <button
+            onClick={clearError}
+            className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-col-reverse w-full mt-8 gap-4">
         {messages.map((m) => (

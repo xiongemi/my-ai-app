@@ -20,20 +20,28 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     [],
   );
   const [isNonStreamingLoading, setIsNonStreamingLoading] = useState(false);
+  const [nonStreamingError, setNonStreamingError] = useState<Error | null>(
+    null,
+  );
 
   const apiKeys = useApiKeys();
   const { billingData, refetch: refetchBilling } = useBilling();
 
-  // Use TextStreamChatTransport with dynamic body function
+  // Use TextStreamChatTransport with prepareSendMessagesRequest to ensure correct format
   const transport = useMemo(
     () =>
       new TextStreamChatTransport({
         api: endpoint,
-        body: () => ({
-          provider: selectedProvider,
-          apiKey: apiKeys[selectedProvider],
-          stream: true,
-          ...(extraBody?.() ?? {}),
+        // Use prepareSendMessagesRequest to explicitly include messages in the request body
+        prepareSendMessagesRequest: ({ messages, body: requestBody }) => ({
+          body: {
+            messages,
+            provider: selectedProvider,
+            apiKey: apiKeys[selectedProvider],
+            stream: true,
+            ...(extraBody?.() ?? {}),
+            ...requestBody,
+          },
         }),
       }),
     [endpoint, selectedProvider, apiKeys, extraBody],
@@ -43,6 +51,8 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     messages: streamingMessages,
     status,
     sendMessage,
+    error: streamingError,
+    clearError: clearStreamingError,
   } = useChat({
     transport,
     onFinish: () => {
@@ -66,6 +76,7 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     setNonStreamingMessages((prev) => [...prev, userMessage]);
     setInputValue('');
     setIsNonStreamingLoading(true);
+    setNonStreamingError(null);
 
     try {
       const response = await fetch(endpoint, {
@@ -83,11 +94,11 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -100,6 +111,9 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
       refetchBilling();
     } catch (error) {
       console.error('Error:', error);
+      setNonStreamingError(
+        error instanceof Error ? error : new Error(String(error)),
+      );
     } finally {
       setIsNonStreamingLoading(false);
     }
@@ -134,6 +148,18 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   // Use appropriate messages based on mode
   const messages = useStreaming ? streamingMessages : nonStreamingMessages;
 
+  // Use appropriate error based on mode
+  const error = useStreaming ? streamingError : nonStreamingError;
+
+  // Clear error function
+  const clearError = useCallback(() => {
+    if (useStreaming) {
+      clearStreamingError();
+    } else {
+      setNonStreamingError(null);
+    }
+  }, [useStreaming, clearStreamingError]);
+
   return {
     // State
     selectedProvider,
@@ -145,8 +171,10 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     isLoading,
     messages,
     billingData,
+    error,
 
     // Handlers
     handleSubmit,
+    clearError,
   };
 }

@@ -1,4 +1,9 @@
-import { ModelMessage, streamText, generateText } from 'ai';
+import {
+  streamText,
+  generateText,
+  convertToModelMessages,
+  UIMessage,
+} from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createAnthropic } from '@ai-sdk/anthropic';
@@ -80,16 +85,27 @@ export async function POST(req: Request) {
   }
 
   const {
-    messages,
+    messages: rawMessages,
     provider: providerId = 'openai',
     apiKey,
     stream = true, // Default to streaming
   }: {
-    messages: ModelMessage[];
+    messages: UIMessage[];
     provider?: ProviderId;
     apiKey?: string;
     stream?: boolean;
   } = await req.json();
+
+  // Validate messages
+  if (!rawMessages || !Array.isArray(rawMessages)) {
+    return NextResponse.json(
+      { error: 'Messages are required and must be an array' },
+      { status: 400 },
+    );
+  }
+
+  // Convert UIMessage[] (from useChat) to ModelMessage[] (for generateText/streamText)
+  const messages = convertToModelMessages(rawMessages);
 
   // Validate provider
   if (!providerConfigs[providerId]) {
