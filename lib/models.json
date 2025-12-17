@@ -28,7 +28,7 @@
     ]
   },
   "deepseek": {
-    "defaultModel": "deepseek-chat",
+    "defaultModel": "deepseek-coder",
     "models": [
       { "id": "deepseek-coder", "name": "DeepSeek Coder", "description": "Optimized for code" },
       { "id": "deepseek-chat", "name": "DeepSeek Chat", "description": "Standard model" }

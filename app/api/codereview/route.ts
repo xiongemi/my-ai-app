@@ -30,7 +30,11 @@ export const providerConfigs = {
     defaultModel: getDefaultModel('anthropic'),
   },
   deepseek: {
-    createProvider: (apiKey: string) => createDeepSeek({ apiKey }),
+    createProvider: (apiKey: string) =>
+      createDeepSeek({
+        apiKey,
+        baseURL: 'https://api.deepseek.com',
+      }),
     defaultModel: getDefaultModel('deepseek'),
   },
   qwen: {
@@ -99,7 +103,7 @@ export async function POST(req: Request) {
       model: requestedModel,
       stream = true, // Default to streaming
     }: {
-      messages: UIMessage[];
+      messages: UIMessage[] | Array<{ role: string; content: string }>;
       provider?: ProviderId;
       apiKey?: string;
       model?: string;
@@ -114,15 +118,29 @@ export async function POST(req: Request) {
       );
     }
 
-    // Convert UIMessage[] (from useChat) to ModelMessage[] (for generateText/streamText)
-    const messages = convertToModelMessages(rawMessages);
+    // Convert messages to ModelMessage[] format
+    // Streaming sends UIMessage[] format, non-streaming sends {role, content} format
+    const messages = stream
+      ? convertToModelMessages(rawMessages as UIMessage[])
+      : (rawMessages as Array<{ role: string; content: string }>).map((m) => ({
+          role: m.role as 'user' | 'assistant' | 'system',
+          content: m.content,
+        }));
 
     // Validate provider
     if (!providerConfigs[providerId]) {
       return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
     }
 
+    const config = providerConfigs[providerId];
+    
+    // Log for debugging - helps identify provider and key issues
+    console.log(
+      `[API] Provider: ${providerId}, Model: ${requestedModel || config.defaultModel}, Stream: ${stream}, Has API Key: ${!!apiKey}`,
+    );
+    
     // Get API key from request or environment
+    // IMPORTANT: Never fall back to a different provider's key
     const resolvedApiKey = apiKey || getEnvApiKey(providerId);
 
     if (!resolvedApiKey) {
@@ -134,7 +152,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const config = providerConfigs[providerId];
+    // Log for debugging - helps identify if wrong key is being used
+    console.log(
+      `[${providerId}] Requested model: ${requestedModel || config.defaultModel}, API key source: ${apiKey ? 'request body' : 'environment'}`,
+    );
+
     const provider = config.createProvider(resolvedApiKey);
     // Use requested model or fall back to default
     const modelName = requestedModel || config.defaultModel;
