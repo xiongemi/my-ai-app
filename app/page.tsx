@@ -5,6 +5,7 @@ import { Code, GitPullRequest, AlertCircle, X, Sparkles } from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
+import { useVercelGatewayFallbackModels } from '@/components/VercelGatewayFallbackModels';
 
 type InputMode = 'file' | 'pr';
 
@@ -14,9 +15,16 @@ export default function Home() {
     'You are a code reviewer. You will be given a file path and you will review the code in that file.',
   );
   const [showSettings, setShowSettings] = useState(false);
+  const [fallbackModels, setFallbackModels] = useVercelGatewayFallbackModels();
 
   // Use useCallback so the function reference is stable
-  const getExtraBody = useCallback(() => ({ systemPrompt }), [systemPrompt]);
+  const getExtraBody = useCallback(
+    () => ({
+      systemPrompt,
+      ...(fallbackModels.length > 0 && { fallbackModels }),
+    }),
+    [systemPrompt, fallbackModels],
+  );
 
   const {
     selectedProvider,
@@ -60,6 +68,8 @@ export default function Home() {
             onModelChange={setSelectedModel}
             useStreaming={useStreaming}
             onStreamingChange={setUseStreaming}
+            fallbackModels={fallbackModels}
+            onFallbackModelsChange={setFallbackModels}
           />
 
           {/* Settings Toggle */}

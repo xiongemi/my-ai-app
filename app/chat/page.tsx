@@ -5,6 +5,7 @@ import { MessageCircle, Send, Sparkles, AlertCircle, X } from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
+import { useVercelGatewayFallbackModels } from '@/components/VercelGatewayFallbackModels';
 
 export default function ChatPage() {
   const [systemPrompt, setSystemPrompt] = useState(
@@ -12,11 +13,16 @@ export default function ChatPage() {
   );
   const [showSettings, setShowSettings] = useState(false);
   const [enableTools, setEnableTools] = useState(false);
+  const [fallbackModels, setFallbackModels] = useVercelGatewayFallbackModels();
 
   // Use useCallback so the function reference is stable
   const getExtraBody = useCallback(
-    () => ({ systemPrompt, enableTools }),
-    [systemPrompt, enableTools],
+    () => ({
+      systemPrompt,
+      enableTools,
+      ...(fallbackModels.length > 0 && { fallbackModels }),
+    }),
+    [systemPrompt, enableTools, fallbackModels],
   );
 
   const {
@@ -62,6 +68,8 @@ export default function ChatPage() {
             onModelChange={setSelectedModel}
             useStreaming={useStreaming}
             onStreamingChange={setUseStreaming}
+            fallbackModels={fallbackModels}
+            onFallbackModelsChange={setFallbackModels}
           />
 
           {/* Settings Toggle */}

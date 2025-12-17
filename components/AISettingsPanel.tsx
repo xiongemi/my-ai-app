@@ -7,6 +7,10 @@ import {
   getDefaultModel,
   type ModelInfo,
 } from '@/lib/models';
+import {
+  VercelGatewayFallbackModels,
+  useVercelGatewayFallbackModels,
+} from './VercelGatewayFallbackModels';
 
 export const providers = [
   { id: 'openai', name: 'OpenAI' },
@@ -50,6 +54,8 @@ interface AISettingsPanelProps {
   useStreaming: boolean;
   onStreamingChange: (streaming: boolean) => void;
   showCredits?: boolean;
+  fallbackModels?: string[];
+  onFallbackModelsChange?: (models: string[]) => void;
 }
 
 export function AISettingsPanel({
@@ -60,9 +66,19 @@ export function AISettingsPanel({
   useStreaming,
   onStreamingChange,
   showCredits = true,
+  fallbackModels,
+  onFallbackModelsChange,
 }: AISettingsPanelProps) {
   const [billingData, setBillingData] = useState<BillingData | null>(null);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+  const [internalFallbackModels, setInternalFallbackModels] =
+    useVercelGatewayFallbackModels();
+
+  // Use prop fallback models if provided, otherwise use internal state
+  const currentFallbackModels =
+    fallbackModels !== undefined ? fallbackModels : internalFallbackModels;
+  const handleFallbackModelsChange =
+    onFallbackModelsChange || setInternalFallbackModels;
 
   // Get available models for the selected provider
   const availableModels = useMemo(
@@ -172,6 +188,14 @@ export function AISettingsPanel({
             />
           </div>
         </div>
+      )}
+
+      {/* Vercel AI Gateway Fallback Models */}
+      {selectedProvider === 'vercel-ai-gateway' && (
+        <VercelGatewayFallbackModels
+          fallbackModels={currentFallbackModels}
+          onFallbackModelsChange={handleFallbackModelsChange}
+        />
       )}
 
       {/* Streaming Toggle */}
