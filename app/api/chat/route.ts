@@ -9,106 +9,113 @@ import {
 import { deductCredits, getCredits } from '@/lib/billing';
 
 export async function POST(req: Request) {
-  if (getCredits() <= 0) {
-    return NextResponse.json(
-      { error: 'Insufficient credits' },
-      { status: 402 },
-    );
-  }
+  try {
+    if (getCredits() <= 0) {
+      return NextResponse.json(
+        { error: 'Insufficient credits' },
+        { status: 402 },
+      );
+    }
 
-  const {
-    messages: rawMessages,
-    provider: providerId = 'openai',
-    apiKey,
-    stream = true,
-    systemPrompt, // Custom system prompt
-    enableTools = false, // Whether to enable file reading tools
-  }: {
-    messages: UIMessage[];
-    provider?: ProviderId;
-    apiKey?: string;
-    stream?: boolean;
-    systemPrompt?: string;
-    enableTools?: boolean;
-  } = await req.json();
+    const {
+      messages: rawMessages,
+      provider: providerId = 'openai',
+      apiKey,
+      stream = true,
+      systemPrompt, // Custom system prompt
+      enableTools = false, // Whether to enable file reading tools
+    }: {
+      messages: UIMessage[];
+      provider?: ProviderId;
+      apiKey?: string;
+      stream?: boolean;
+      systemPrompt?: string;
+      enableTools?: boolean;
+    } = await req.json();
 
-  // Validate messages
-  if (!rawMessages || !Array.isArray(rawMessages)) {
-    return NextResponse.json(
-      { error: 'Messages are required and must be an array' },
-      { status: 400 },
-    );
-  }
+    // Validate messages
+    if (!rawMessages || !Array.isArray(rawMessages)) {
+      return NextResponse.json(
+        { error: 'Messages are required and must be an array' },
+        { status: 400 },
+      );
+    }
 
-  // Convert UIMessage[] (from useChat) to ModelMessage[] (for generateText/streamText)
-  const messages = convertToModelMessages(rawMessages);
+    // Convert UIMessage[] (from useChat) to ModelMessage[] (for generateText/streamText)
+    const messages = convertToModelMessages(rawMessages);
 
-  // Validate provider
-  if (!providerConfigs[providerId]) {
-    return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
-  }
+    // Validate provider
+    if (!providerConfigs[providerId]) {
+      return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
+    }
 
-  // Get API key from request or environment
-  const resolvedApiKey = apiKey || getEnvApiKey(providerId);
+    // Get API key from request or environment
+    const resolvedApiKey = apiKey || getEnvApiKey(providerId);
 
-  if (!resolvedApiKey) {
-    return NextResponse.json(
-      {
-        error: `No API key provided for ${providerId}. Please add it in Settings.`,
-      },
-      { status: 400 },
-    );
-  }
+    if (!resolvedApiKey) {
+      return NextResponse.json(
+        {
+          error: `No API key provided for ${providerId}. Please add it in Settings.`,
+        },
+        { status: 400 },
+      );
+    }
 
-  const config = providerConfigs[providerId];
-  const providerInstance = config.createProvider(resolvedApiKey);
-  const modelName = config.defaultModel;
+    const config = providerConfigs[providerId];
+    const providerInstance = config.createProvider(resolvedApiKey);
+    const modelName = config.defaultModel;
 
-  // Default system prompt if none provided
-  const finalSystemPrompt = systemPrompt || 'You are a helpful AI assistant.';
+    // Default system prompt if none provided
+    const finalSystemPrompt = systemPrompt || 'You are a helpful AI assistant.';
 
-  const baseOptions = {
-    model: providerInstance(modelName),
-    system: finalSystemPrompt,
-    messages,
-    ...(enableTools && { tools: codeTools }),
-  };
+    const baseOptions = {
+      model: providerInstance(modelName),
+      system: finalSystemPrompt,
+      messages,
+      ...(enableTools && { tools: codeTools }),
+    };
 
-  if (stream) {
-    // Streaming mode
-    const result = await streamText({
-      ...baseOptions,
-      onFinish: ({ usage }) => {
-        deductCredits(
-          modelName,
-          usage.inputTokens ?? 0,
-          usage.outputTokens ?? 0,
-        );
-      },
-    });
+    if (stream) {
+      // Streaming mode - use toUIMessageStreamResponse for proper error handling
+      const result = streamText({
+        ...baseOptions,
+        onFinish: ({ usage }) => {
+          deductCredits(
+            modelName,
+            usage.inputTokens ?? 0,
+            usage.outputTokens ?? 0,
+          );
+        },
+      });
 
-    return result.toTextStreamResponse();
-  } else {
-    // Non-streaming mode - better for accurate usage tracking
-    const result = await generateText(baseOptions);
+      return result.toUIMessageStreamResponse();
+    } else {
+      // Non-streaming mode - better for accurate usage tracking
+      const result = await generateText(baseOptions);
 
-    // Accurate usage tracking - AI SDK v5 uses inputTokens/outputTokens
-    const promptTokens = result.usage.inputTokens ?? 0;
-    const completionTokens = result.usage.outputTokens ?? 0;
-    const billingResult = deductCredits(
-      modelName,
-      promptTokens,
-      completionTokens,
-    );
-
-    return NextResponse.json({
-      text: result.text,
-      usage: {
+      // Accurate usage tracking - AI SDK v5 uses inputTokens/outputTokens
+      const promptTokens = result.usage.inputTokens ?? 0;
+      const completionTokens = result.usage.outputTokens ?? 0;
+      const billingResult = deductCredits(
+        modelName,
         promptTokens,
         completionTokens,
-        totalTokens: promptTokens + completionTokens,
-      },
-      billing: billingResult,
-    });
+      );
+
+      return NextResponse.json({
+        text: result.text,
+        usage: {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        },
+        billing: billingResult,
+      });
+    }
+  } catch (error) {
+    console.error('Chat error:', error);
+    const message =
+      error instanceof Error ? error.message : 'An unexpected error occurred';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

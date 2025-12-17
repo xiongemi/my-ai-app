@@ -1,7 +1,7 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
-import { TextStreamChatTransport } from 'ai';
+import { DefaultChatTransport } from 'ai';
 import { useState, useMemo, useCallback } from 'react';
 import { useApiKeys, useBilling, Message } from '@/components/AISettingsPanel';
 
@@ -23,14 +23,18 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   const [nonStreamingError, setNonStreamingError] = useState<Error | null>(
     null,
   );
+  const [streamingErrorState, setStreamingErrorState] = useState<Error | null>(
+    null,
+  );
 
   const apiKeys = useApiKeys();
   const { billingData, refetch: refetchBilling } = useBilling();
 
-  // Use TextStreamChatTransport with prepareSendMessagesRequest to ensure correct format
+  // Use DefaultChatTransport with prepareSendMessagesRequest to ensure correct format
+  // DefaultChatTransport works with toUIMessageStreamResponse() which properly handles errors
   const transport = useMemo(
     () =>
-      new TextStreamChatTransport({
+      new DefaultChatTransport({
         api: endpoint,
         // Use prepareSendMessagesRequest to explicitly include messages in the request body
         prepareSendMessagesRequest: ({ messages, body: requestBody }) => ({
@@ -51,14 +55,24 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     messages: streamingMessages,
     status,
     sendMessage,
-    error: streamingError,
-    clearError: clearStreamingError,
+    error: useChatError,
+    clearError: clearUseChatError,
   } = useChat({
     transport,
+    onError: (error) => {
+      console.error('Streaming error:', error);
+      setStreamingErrorState(error);
+    },
     onFinish: () => {
       refetchBilling();
     },
   });
+
+  // Combine useChat error with our state error, and check status for error state
+  const streamingError =
+    useChatError ||
+    streamingErrorState ||
+    (status === 'error' ? new Error('An error occurred during streaming') : null);
 
   const isStreamingLoading = status === 'streaming' || status === 'submitted';
   const isLoading = useStreaming ? isStreamingLoading : isNonStreamingLoading;
@@ -135,6 +149,8 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
       if (!inputValue.trim() || isLoading) return;
 
       if (useStreaming) {
+        // Clear previous errors before sending new message
+        setStreamingErrorState(null);
         // Use sendMessage with text format (AI SDK 5 style)
         await sendMessage({ text: inputValue });
         setInputValue('');
@@ -154,11 +170,12 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   // Clear error function
   const clearError = useCallback(() => {
     if (useStreaming) {
-      clearStreamingError();
+      clearUseChatError();
+      setStreamingErrorState(null);
     } else {
       setNonStreamingError(null);
     }
-  }, [useStreaming, clearStreamingError]);
+  }, [useStreaming, clearUseChatError]);
 
   return {
     // State
