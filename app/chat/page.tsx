@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react';
 import { MessageCircle, Send, Sparkles, AlertCircle, X } from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
+import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 
 export default function ChatPage() {
   const [systemPrompt, setSystemPrompt] = useState(
@@ -169,18 +170,18 @@ export default function ChatPage() {
                 </span>
               )}
             </div>
-            <span className="text-zinc-700 dark:text-zinc-300">
+            <div className="text-zinc-700 dark:text-zinc-300">
               {/* Handle both streaming (parts) and non-streaming (content) formats */}
-              {'parts' in m && m.parts
-                ? m.parts.map((part, i) =>
-                    part.type === 'text' ? (
-                      <span key={i}>{part.text}</span>
-                    ) : null,
-                  )
-                : 'content' in m
-                  ? m.content
-                  : ''}
-            </span>
+              {'parts' in m && m.parts ? (
+                m.parts.map((part, i) =>
+                  part.type === 'text' ? (
+                    <MarkdownRenderer key={i} content={part.text} />
+                  ) : null,
+                )
+              ) : 'content' in m && m.content ? (
+                <MarkdownRenderer content={m.content} />
+              ) : null}
+            </div>
           </div>
         ))}
       </div>

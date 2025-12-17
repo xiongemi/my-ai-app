@@ -15,11 +15,16 @@ const config: Config = {
   // Handle module path aliases (matching tsconfig.json paths)
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    '^marked$': '<rootDir>/node_modules/marked/lib/marked.cjs',
   },
   // Mock web streams API for tests
   testEnvironmentOptions: {
     customExportConditions: [''],
   },
+  // Transform ES modules from node_modules
+  transformIgnorePatterns: [
+    'node_modules/(?!(marked)/)',
+  ],
 };
 
 // createJestConfig is exported this way to ensure that next/jest can load the Next.js config which is async
