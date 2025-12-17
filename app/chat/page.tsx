@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { MessageCircle, Send, Sparkles } from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
@@ -12,8 +12,8 @@ export default function ChatPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [enableTools, setEnableTools] = useState(false);
 
-  // Memoize extraBody to prevent infinite re-renders
-  const extraBody = useMemo(
+  // Use useCallback so the function reference is stable
+  const getExtraBody = useCallback(
     () => ({ systemPrompt, enableTools }),
     [systemPrompt, enableTools],
   );
@@ -30,7 +30,7 @@ export default function ChatPage() {
     handleSubmit,
   } = useAIChat({
     endpoint: '/api/chat',
-    extraBody,
+    extraBody: getExtraBody,
   });
 
   const currentProvider = providers.find((p) => p.id === selectedProvider);

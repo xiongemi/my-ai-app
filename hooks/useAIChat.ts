@@ -1,17 +1,18 @@
 'use client';
 
 import { useChat } from '@ai-sdk/react';
+import { TextStreamChatTransport } from 'ai';
 import { useState, useMemo, useCallback } from 'react';
 import { useApiKeys, useBilling, Message } from '@/components/AISettingsPanel';
 
 interface UseAIChatOptions {
   /** API endpoint to call */
   endpoint: string;
-  /** Extra body parameters to include in requests */
-  extraBody?: Record<string, unknown>;
+  /** Extra body parameters to include in requests (can be a function for dynamic values) */
+  extraBody?: () => Record<string, unknown>;
 }
 
-export function useAIChat({ endpoint, extraBody = {} }: UseAIChatOptions) {
+export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   const [selectedProvider, setSelectedProvider] = useState('openai');
   const [inputValue, setInputValue] = useState('');
   const [useStreaming, setUseStreaming] = useState(true);
@@ -23,48 +24,19 @@ export function useAIChat({ endpoint, extraBody = {} }: UseAIChatOptions) {
   const apiKeys = useApiKeys();
   const { billingData, refetch: refetchBilling } = useBilling();
 
-  // Create a custom transport to inject provider and apiKey (for streaming)
+  // Use TextStreamChatTransport with dynamic body function
   const transport = useMemo(
     () =>
-      ({
-        sendMessages: async ({
-          messages,
-          abortSignal,
-        }: {
-          messages: Array<{
-            role: string;
-            parts: Array<{ type: string; text?: string }>;
-          }>;
-          abortSignal?: AbortSignal;
-        }) => {
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              messages: messages.map((m) => ({
-                role: m.role,
-                content: m.parts?.find((p) => p.type === 'text')?.text || '',
-              })),
-              provider: selectedProvider,
-              apiKey: apiKeys[selectedProvider],
-              stream: true,
-              ...extraBody,
-            }),
-            signal: abortSignal,
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-
-          return response.body!;
-        },
-        reconnectToStream: async () => {
-          return undefined;
-        },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      }) as any,
-    [selectedProvider, apiKeys, endpoint, extraBody],
+      new TextStreamChatTransport({
+        api: endpoint,
+        body: () => ({
+          provider: selectedProvider,
+          apiKey: apiKeys[selectedProvider],
+          stream: true,
+          ...(extraBody?.() ?? {}),
+        }),
+      }),
+    [endpoint, selectedProvider, apiKeys, extraBody],
   );
 
   const {
@@ -107,7 +79,7 @@ export function useAIChat({ endpoint, extraBody = {} }: UseAIChatOptions) {
           provider: selectedProvider,
           apiKey: apiKeys[selectedProvider],
           stream: false,
-          ...extraBody,
+          ...(extraBody?.() ?? {}),
         }),
       });
 
@@ -149,10 +121,8 @@ export function useAIChat({ endpoint, extraBody = {} }: UseAIChatOptions) {
       if (!inputValue.trim() || isLoading) return;
 
       if (useStreaming) {
-        await sendMessage({
-          role: 'user',
-          parts: [{ type: 'text', text: inputValue }],
-        });
+        // Use sendMessage with text format (AI SDK 5 style)
+        await sendMessage({ text: inputValue });
         setInputValue('');
       } else {
         await handleNonStreamingSubmit();
@@ -180,4 +150,3 @@ export function useAIChat({ endpoint, extraBody = {} }: UseAIChatOptions) {
     handleSubmit,
   };
 }
-
