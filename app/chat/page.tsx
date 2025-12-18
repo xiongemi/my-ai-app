@@ -170,7 +170,7 @@ export default function ChatPage() {
               <strong className="text-zinc-900 dark:text-zinc-100">
                 {m.role === 'user' ? 'You' : currentProvider?.name || 'AI'}
               </strong>
-              {/* Show usage for non-streaming messages */}
+              {/* Show usage for both streaming and non-streaming messages */}
               {'usage' in m && m.usage && (
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">
                   {m.usage.promptTokens} prompt + {m.usage.completionTokens}{' '}

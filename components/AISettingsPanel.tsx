@@ -37,6 +37,7 @@ export interface Message {
 
 export interface BillingData {
   totalCost: number;
+  totalTokens?: number;
   usageHistory: Array<{
     timestamp: string;
     model: string;
@@ -128,12 +129,22 @@ export function AISettingsPanel({
     <div className="flex flex-col gap-4">
       {/* Credits/Cost Display */}
       {showCredits && billingData && (
-        <p className="text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-          Total Cost:{' '}
-          <span className="font-semibold text-black dark:text-white">
-            ${billingData?.totalCost?.toFixed(4) ?? 0}
-          </span>
-        </p>
+        <div className="flex flex-col gap-1">
+          <p className="text-lg leading-8 text-zinc-600 dark:text-zinc-400">
+            Total Cost:{' '}
+            <span className="font-semibold text-black dark:text-white">
+              ${billingData?.totalCost?.toFixed(4) ?? 0}
+            </span>
+          </p>
+          {billingData.totalTokens !== undefined && (
+            <p className="text-sm text-zinc-500 dark:text-zinc-500">
+              Total Tokens:{' '}
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                {billingData.totalTokens.toLocaleString()}
+              </span>
+            </p>
+          )}
+        </div>
       )}
 
       {/* Provider Selector */}

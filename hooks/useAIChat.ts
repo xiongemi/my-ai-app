@@ -37,6 +37,10 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   const [streamingErrorState, setStreamingErrorState] = useState<Error | null>(
     null,
   );
+  // Track usage for streaming messages - map message ID to usage
+  const [messageUsageMap, setMessageUsageMap] = useState<
+    Map<string, { promptTokens: number; completionTokens: number; totalTokens: number }>
+  >(new Map());
 
   const apiKeys = useApiKeys();
   const { billingData, refetch: refetchBilling } = useBilling();
@@ -104,9 +108,19 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
       console.error('Streaming error:', error);
       setStreamingErrorState(error);
     },
-    onFinish: () => {
-      // Check if the last message has usage metadata
-      // The usage should be attached via messageMetadata in toUIMessageStreamResponse
+    onFinish: ({ message }) => {
+      // Try to extract usage from message metadata if available
+      // The messageMetadata callback should attach usage, but if it's not preserved,
+      // we'll need to get it from the stream response headers or track it separately
+      console.log('[Frontend Streaming] Stream finished, message:', {
+        id: message.id,
+        hasUsage: 'usage' in message,
+        usage: (message as any).usage,
+        messageKeys: Object.keys(message),
+        // Check for metadata
+        hasMetadata: 'metadata' in message,
+        metadata: (message as any).metadata,
+      });
       refetchBilling();
     },
   });
@@ -126,16 +140,17 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   useEffect(() => {
     if (useStreaming && streamingMessages.length > 0) {
       const lastMessage = streamingMessages[streamingMessages.length - 1];
-      if (lastMessage.role === 'assistant' && 'usage' in lastMessage) {
-        console.log('[Frontend Streaming] Usage found in message:', {
-          messageId: lastMessage.id,
-          usage: (lastMessage as any).usage,
-        });
-      } else if (lastMessage.role === 'assistant') {
-        console.log('[Frontend Streaming] No usage found in message:', {
+      if (lastMessage.role === 'assistant') {
+        const msgAny = lastMessage as any;
+        console.log('[Frontend Streaming] Message check:', {
           messageId: lastMessage.id,
           hasUsage: 'usage' in lastMessage,
+          usage: msgAny.usage,
+          hasMetadata: 'metadata' in lastMessage,
+          metadata: msgAny.metadata,
           messageKeys: Object.keys(lastMessage),
+          // Check all properties
+          allProps: Object.keys(msgAny),
         });
       }
     }
@@ -266,8 +281,35 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     ],
   );
 
+  // Enhance streaming messages with usage if available
+  // Since messageMetadata might not be preserved by useChat, we'll manually add usage
+  const enhancedStreamingMessages = useMemo(() => {
+    if (!useStreaming) return streamingMessages;
+    
+    return streamingMessages.map((msg) => {
+      // If message already has usage, return as-is
+      if ('usage' in msg && msg.usage) {
+        return msg;
+      }
+      
+      // Check if we have stored usage for this message
+      const storedUsage = messageUsageMap.get(msg.id);
+      if (storedUsage) {
+        return { ...msg, usage: storedUsage };
+      }
+      
+      // Check if usage is in message metadata
+      const msgAny = msg as any;
+      if (msgAny.metadata?.usage) {
+        return { ...msg, usage: msgAny.metadata.usage };
+      }
+      
+      return msg;
+    });
+  }, [streamingMessages, useStreaming, messageUsageMap]);
+
   // Use appropriate messages based on mode
-  const messages = useStreaming ? streamingMessages : nonStreamingMessages;
+  const messages = useStreaming ? enhancedStreamingMessages : nonStreamingMessages;
 
   // Use appropriate error based on mode
   const error = useStreaming ? streamingError : nonStreamingError;

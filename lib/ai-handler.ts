@@ -185,6 +185,9 @@ export async function handleAIRequest(options: AIHandlerOptions) {
 
   if (stream) {
     // Streaming mode
+    // Store usage from onFinish to use in messageMetadata
+    let streamUsage: { inputTokens: number; outputTokens: number } | null = null;
+
     const result = streamText({
       model,
       system: systemPrompt,
@@ -195,6 +198,11 @@ export async function handleAIRequest(options: AIHandlerOptions) {
         console.log(
           `[${logPrefix}] Stream finished. Reason: ${finishReason}, Tokens: ${usage.inputTokens}/${usage.outputTokens}`,
         );
+        // Store usage for messageMetadata
+        streamUsage = {
+          inputTokens: usage.inputTokens ?? 0,
+          outputTokens: usage.outputTokens ?? 0,
+        };
         deductCredits(
           modelName,
           usage.inputTokens ?? 0,
@@ -222,16 +230,46 @@ export async function handleAIRequest(options: AIHandlerOptions) {
         messageMetadata: ({ part }) => {
           // Include usage information when available
           if (part.type === 'finish') {
-            return {
-              usage: {
-                promptTokens: part.totalUsage?.inputTokens ?? 0,
-                completionTokens: part.totalUsage?.outputTokens ?? 0,
-                totalTokens:
-                  part.totalUsage?.totalTokens ??
-                  (part.totalUsage?.inputTokens ?? 0) +
-                    (part.totalUsage?.outputTokens ?? 0),
-              },
-            };
+            // Log what's available in part
+            console.log(
+              `[${logPrefix}] messageMetadata called for finish part:`,
+              JSON.stringify({
+                hasTotalUsage: !!part.totalUsage,
+                totalUsage: part.totalUsage,
+                hasStreamUsage: !!streamUsage,
+                streamUsage,
+              }),
+            );
+
+            // Try to get usage from part.totalUsage first, then fall back to stored streamUsage
+            const usage = part.totalUsage
+              ? {
+                  promptTokens: part.totalUsage.inputTokens ?? 0,
+                  completionTokens: part.totalUsage.outputTokens ?? 0,
+                  totalTokens:
+                    part.totalUsage.totalTokens ??
+                    (part.totalUsage.inputTokens ?? 0) +
+                      (part.totalUsage.outputTokens ?? 0),
+                }
+              : streamUsage
+                ? {
+                    promptTokens: streamUsage.inputTokens,
+                    completionTokens: streamUsage.outputTokens,
+                    totalTokens:
+                      streamUsage.inputTokens + streamUsage.outputTokens,
+                  }
+                : {
+                    promptTokens: 0,
+                    completionTokens: 0,
+                    totalTokens: 0,
+                  };
+
+            console.log(
+              `[${logPrefix}] Attaching usage metadata to message:`,
+              JSON.stringify(usage),
+            );
+
+            return { usage };
           }
           return undefined;
         },
@@ -245,6 +283,11 @@ export async function handleAIRequest(options: AIHandlerOptions) {
           console.log(
             `[${logPrefix}] Usage attached to response message:`,
             (responseMessage as any).usage,
+          );
+        } else if (enableUsageMetadata && streamUsage) {
+          console.log(
+            `[${logPrefix}] Usage was available but not attached. Stream usage:`,
+            streamUsage,
           );
         }
       },
