@@ -26,7 +26,6 @@ export interface AIHandlerOptions {
   enableStepLogging?: boolean; // Whether to log tool calls and results
   contextFileHash?: string; // Hash of context file for cache key generation
   fallbackModels?: string[]; // Fallback models for Vercel AI Gateway (providerOptions.gateway.models)
-  onStreamFinish?: (text: string, usage: { promptTokens: number; completionTokens: number; totalTokens: number }) => void; // Callback when stream finishes with full text and usage
 }
 
 export async function handleAIRequest(options: AIHandlerOptions) {
@@ -44,7 +43,6 @@ export async function handleAIRequest(options: AIHandlerOptions) {
     enableStepLogging = false,
     contextFileHash,
     fallbackModels,
-    onStreamFinish,
   } = options;
 
   // Check credits
@@ -210,27 +208,25 @@ export async function handleAIRequest(options: AIHandlerOptions) {
             },
           },
         }),
-      onFinish: ({ text, usage, finishReason }: { text: string; usage: { inputTokens?: number; outputTokens?: number }; finishReason: string }) => {
+      onFinish: ({
+        text,
+        usage,
+        finishReason,
+      }: {
+        text: string;
+        usage: { inputTokens?: number; outputTokens?: number };
+        finishReason: string;
+      }) => {
         console.log(
           `[${logPrefix}] Stream finished. Reason: ${finishReason}, Tokens: ${usage.inputTokens}/${usage.outputTokens}`,
         );
-        // Store text and usage for messageMetadata and PR comments
+        // Store text and usage for messageMetadata
         collectedText = text;
         streamUsage = {
           inputTokens: usage.inputTokens ?? 0,
           outputTokens: usage.outputTokens ?? 0,
         };
-        
-        // Call onStreamFinish callback if provided (for PR comments, etc.)
-        if (onStreamFinish) {
-          const tokenUsage = {
-            promptTokens: usage.inputTokens ?? 0,
-            completionTokens: usage.outputTokens ?? 0,
-            totalTokens: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-          };
-          onStreamFinish(text, tokenUsage);
-        }
-        
+
         deductCredits(
           modelName,
           usage.inputTokens ?? 0,
@@ -238,7 +234,17 @@ export async function handleAIRequest(options: AIHandlerOptions) {
         );
       },
       ...(enableStepLogging && {
-        onStepFinish: ({ text, toolCalls, toolResults, finishReason }: { text: string; toolCalls?: Array<{ toolName: string }>; toolResults?: unknown[]; finishReason: string }) => {
+        onStepFinish: ({
+          text,
+          toolCalls,
+          toolResults,
+          finishReason,
+        }: {
+          text: string;
+          toolCalls?: Array<{ toolName: string }>;
+          toolResults?: unknown[];
+          finishReason: string;
+        }) => {
           if (toolCalls && toolCalls.length > 0) {
             console.log(
               `[${logPrefix}] Tool calls made: ${toolCalls.map((tc: { toolName: string }) => tc.toolName).join(', ')}`,
@@ -255,7 +261,18 @@ export async function handleAIRequest(options: AIHandlerOptions) {
 
     return result.toUIMessageStreamResponse({
       ...(enableUsageMetadata && {
-        messageMetadata: ({ part }: { part: { type: string; totalUsage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } } }) => {
+        messageMetadata: ({
+          part,
+        }: {
+          part: {
+            type: string;
+            totalUsage?: {
+              inputTokens?: number;
+              outputTokens?: number;
+              totalTokens?: number;
+            };
+          };
+        }) => {
           // Include usage information when available
           if (part.type === 'finish') {
             // Log what's available in part
@@ -302,7 +319,13 @@ export async function handleAIRequest(options: AIHandlerOptions) {
           return undefined;
         },
       }),
-      onFinish: ({ messages, responseMessage }: { messages: unknown[]; responseMessage: { id: string } & { usage?: unknown } }) => {
+      onFinish: ({
+        messages,
+        responseMessage,
+      }: {
+        messages: unknown[];
+        responseMessage: { id: string } & { usage?: unknown };
+      }) => {
         console.log(
           `[${logPrefix}] Stream completed. Response message ID: ${responseMessage.id}`,
         );

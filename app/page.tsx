@@ -11,6 +11,7 @@ import {
   Upload,
   Square,
 } from 'lucide-react';
+import type { UIMessage } from 'ai';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
