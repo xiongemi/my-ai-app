@@ -36,10 +36,10 @@ export default function RootLayout({
           <BillingProvider>
             <header className="w-full border-b border-zinc-200 dark:border-zinc-800">
               <div className="flex items-center justify-between h-16 px-4 mx-auto max-w-7xl sm:px-6 lg:px-8">
-                <h1 className="text-2xl font-bold text-black dark:text-white">
-                  <Link href="/">AI Agent</Link>
-                </h1>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-6">
+                  <h1 className="text-2xl font-bold text-black dark:text-white">
+                    <Link href="/">AI Agent</Link>
+                  </h1>
                   <Link
                     href="/"
                     className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
@@ -54,6 +54,8 @@ export default function RootLayout({
                     <MessageCircle size={16} />
                     Chat
                   </Link>
+                </div>
+                <div className="flex items-center gap-4">
                   <ThemeSwitcher />
                   <Link
                     href="/settings"
