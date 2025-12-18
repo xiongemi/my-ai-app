@@ -160,24 +160,63 @@ async function postPRComment(
     commentBody += `\n\n---\n**Usage:** ${usage.promptTokens} prompt + ${usage.completionTokens} completion = ${usage.totalTokens} tokens`;
   }
 
-  const response = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`,
-    {
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
+  
+  console.log('[CodeReview] Posting PR comment:', {
+    owner,
+    repo,
+    prNumber,
+    commentLength: commentBody.length,
+    tokenPrefix: githubToken.substring(0, 10) + '...',
+  });
+
+  try {
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         Authorization: `token ${githubToken}`,
         Accept: 'application/vnd.github.v3+json',
         'Content-Type': 'application/json',
+        'User-Agent': 'AI-Code-Reviewer',
       },
       body: JSON.stringify({ body: commentBody }),
-    },
-  );
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Failed to post PR comment: ${response.status} ${response.statusText}. ${errorText}`,
-    );
+    console.log('[CodeReview] GitHub API response:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries()),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[CodeReview] GitHub API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText,
+        url: apiUrl,
+      });
+      throw new Error(
+        `Failed to post PR comment: ${response.status} ${response.statusText}. ${errorText}`,
+      );
+    }
+
+    const responseData = await response.json().catch(() => null);
+    console.log('[CodeReview] Successfully posted PR comment:', {
+      commentId: responseData?.id,
+      commentUrl: responseData?.html_url,
+    });
+  } catch (error) {
+    console.error('[CodeReview] Error posting PR comment:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      owner,
+      repo,
+      prNumber,
+      apiUrl,
+    });
+    throw error;
   }
 }
 
@@ -317,6 +356,15 @@ You will be given a file path and you will review the code in that file.`;
 
         // Post comment to GitHub PR
         if (reviewText && prInfo && resolvedGithubToken) {
+          console.log('[CodeReview] Attempting to post PR comment:', {
+            hasReviewText: !!reviewText,
+            reviewTextLength: reviewText.length,
+            prInfo,
+            hasToken: !!resolvedGithubToken,
+            tokenLength: resolvedGithubToken.length,
+            tokenPrefix: resolvedGithubToken.substring(0, 10) + '...',
+          });
+          
           try {
             await postPRComment(
               resolvedGithubToken,
@@ -330,9 +378,23 @@ You will be given a file path and you will review the code in that file.`;
               `[CodeReview] Successfully posted PR comment to ${prInfo.owner}/${prInfo.repo}#${prInfo.prNumber}`,
             );
           } catch (error) {
-            console.error('[CodeReview] Failed to post PR comment:', error);
-            // Don't fail the request if comment posting fails
+            console.error('[CodeReview] Failed to post PR comment:', {
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+              prInfo,
+              reviewTextLength: reviewText.length,
+              usage,
+              tokenPrefix: resolvedGithubToken.substring(0, 10) + '...',
+            });
+            // Don't fail the request if comment posting fails, but log the error
           }
+        } else {
+          console.warn('[CodeReview] Skipping PR comment post:', {
+            hasReviewText: !!reviewText,
+            hasPrInfo: !!prInfo,
+            hasToken: !!resolvedGithubToken,
+            prInfo,
+          });
         }
 
         return NextResponse.json(responseData);

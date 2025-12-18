@@ -141,14 +141,6 @@ export default function SettingsPage() {
             ))}
           </div>
 
-          <button
-            onClick={handleSave}
-            className="flex items-center justify-center gap-2 w-full sm:w-fit px-6 py-3 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-          >
-            <Save size={16} />
-            {saved ? 'Saved!' : 'Save API Keys'}
-          </button>
-
           <p className="text-xs text-zinc-500 dark:text-zinc-500">
             API keys are stored locally in your browser. They are never sent to
             our servers.
@@ -201,6 +193,14 @@ export default function SettingsPage() {
               </button>
             </div>
           </div>
+
+          <button
+            onClick={handleSave}
+            className="flex items-center justify-center gap-2 w-full sm:w-fit px-6 py-3 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+          >
+            <Save size={16} />
+            {saved ? 'Saved!' : 'Save API Keys'}
+          </button>
         </div>
       </div>
     </div>
