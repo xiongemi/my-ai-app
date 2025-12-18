@@ -322,7 +322,7 @@ You will be given a file path and you will review the code in that file.`;
       }
     }
 
-    // For streaming with githubToken, intercept the stream to collect text and post comment
+    // For streaming with githubToken, use onStreamFinish callback to post comment
     if (stream && resolvedGithubToken && prInfo) {
       try {
         const response = await handleAIRequest({
@@ -339,81 +339,46 @@ You will be given a file path and you will review the code in that file.`;
           logPrefix: 'CodeReview',
           contextFileHash: contextFile?.hash,
           fallbackModels,
-        });
-
-        // If response is an error, return it directly
-        if (!response.ok) {
-          return response;
-        }
-
-        // Intercept the streaming response to collect text and usage
-        const originalStream = response.body;
-        if (!originalStream) {
-          console.error('[CodeReview] No stream body in response');
-          return response;
-        }
-
-        // Transform stream to collect text and usage, then post PR comment when complete
-        const transformedStream = transformStreamToCollectData(
-          originalStream,
-          (result) => {
-            // Stream finished - post comment to GitHub only after stream completes
-            if (result.text && prInfo && resolvedGithubToken) {
-              console.log(
-                '[CodeReview] Stream completed, posting PR comment:',
-                {
-                  textLength: result.text.length,
-                  textPreview: result.text.substring(0, 200),
-                  usage: result.usage,
-                  prInfo,
-                },
-              );
-
-              // Post comment asynchronously (don't block the response)
-              // This happens after the stream has fully completed
-              postPRComment(
-                resolvedGithubToken,
+          onStreamFinish: (text, usage) => {
+            // Stream finished - post comment to GitHub
+            console.log(
+              '[CodeReview] Stream completed, posting PR comment:',
+              {
+                textLength: text.length,
+                textPreview: text.substring(0, 200),
+                usage,
                 prInfo,
-                result.text,
-                result.usage || undefined,
-              )
-                .then(() => {
-                  console.log(
-                    `[CodeReview] Successfully posted PR comment to ${prInfo.owner}/${prInfo.repo}#${prInfo.prNumber}`,
-                  );
-                })
-                .catch((error) => {
-                  console.error(
-                    '[CodeReview] Failed to post PR comment after streaming:',
-                    {
-                      error:
-                        error instanceof Error ? error.message : String(error),
-                      stack: error instanceof Error ? error.stack : undefined,
-                      prInfo,
-                      textLength: result.text.length,
-                    },
-                  );
-                });
-            } else {
-              console.warn(
-                '[CodeReview] Stream completed but not posting comment:',
-                {
-                  hasText: !!result.text,
-                  textLength: result.text.length,
-                  hasPrInfo: !!prInfo,
-                  hasToken: !!resolvedGithubToken,
-                },
-              );
-            }
-          },
-        );
+              },
+            );
 
-        // Return a new response with the transformed stream
-        return new Response(transformedStream, {
-          headers: response.headers,
-          status: response.status,
-          statusText: response.statusText,
+            // Post comment asynchronously (don't block the response)
+            postPRComment(
+              resolvedGithubToken,
+              prInfo,
+              text,
+              usage,
+            )
+              .then(() => {
+                console.log(
+                  `[CodeReview] Successfully posted PR comment to ${prInfo.owner}/${prInfo.repo}#${prInfo.prNumber}`,
+                );
+              })
+              .catch((error) => {
+                console.error(
+                  '[CodeReview] Failed to post PR comment after streaming:',
+                  {
+                    error:
+                      error instanceof Error ? error.message : String(error),
+                    stack: error instanceof Error ? error.stack : undefined,
+                    prInfo,
+                    textLength: text.length,
+                  },
+                );
+              });
+          },
         });
+
+        return response;
       } catch (error) {
         console.error(
           '[CodeReview] Error in streaming with githubToken:',

@@ -85,6 +85,7 @@ function extractFromStreamData(
         hasMessage: !!data.message,
         hasDelta: !!data.delta,
         textDeltaPreview: data.textDelta?.substring(0, 100),
+        deltaPreview: data.delta?.substring(0, 100),
         textPreview: data.text?.substring(0, 100),
         contentPreview: typeof data.content === 'string' ? data.content.substring(0, 100) : undefined,
         keys: Object.keys(data),
@@ -92,9 +93,14 @@ function extractFromStreamData(
     }
   }
 
-  // Extract text deltas
-  if (data.type === 'text-delta' && data.textDelta) {
-    text += data.textDelta;
+  // Extract text deltas (AI SDK uses 'delta' property, not 'textDelta')
+  if (data.type === 'text-delta') {
+    if (data.delta) {
+      text += data.delta;
+    } else if (data.textDelta) {
+      // Fallback to textDelta for compatibility
+      text += data.textDelta;
+    }
   }
 
   // Extract full text from text chunks (replaces accumulated text)
@@ -131,7 +137,20 @@ function extractFromStreamData(
     };
   }
 
-  // Also check for usage in message metadata
+  // Also check for usage in messageMetadata (finish event format)
+  if (data.type === 'finish' && data.messageMetadata?.usage) {
+    usage = {
+      promptTokens: data.messageMetadata.usage.promptTokens ?? data.messageMetadata.usage.inputTokens ?? 0,
+      completionTokens:
+        data.messageMetadata.usage.completionTokens ?? data.messageMetadata.usage.outputTokens ?? 0,
+      totalTokens:
+        data.messageMetadata.usage.totalTokens ??
+        (data.messageMetadata.usage.promptTokens ?? data.messageMetadata.usage.inputTokens ?? 0) +
+          (data.messageMetadata.usage.completionTokens ?? data.messageMetadata.usage.outputTokens ?? 0),
+    };
+  }
+
+  // Also check for usage in metadata
   if (data.metadata?.usage) {
     usage = {
       promptTokens: data.metadata.usage.promptTokens ?? 0,
