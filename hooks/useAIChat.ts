@@ -40,7 +40,10 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   );
   // Track usage for streaming messages - map message ID to usage
   const [messageUsageMap, setMessageUsageMap] = useState<
-    Map<string, { promptTokens: number; completionTokens: number; totalTokens: number }>
+    Map<
+      string,
+      { promptTokens: number; completionTokens: number; totalTokens: number }
+    >
   >(new Map());
 
   const apiKeys = useApiKeys();
@@ -286,31 +289,33 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   // Since messageMetadata might not be preserved by useChat, we'll manually add usage
   const enhancedStreamingMessages = useMemo(() => {
     if (!useStreaming) return streamingMessages;
-    
+
     return streamingMessages.map((msg) => {
       // If message already has usage, return as-is
       if ('usage' in msg && msg.usage) {
         return msg;
       }
-      
+
       // Check if we have stored usage for this message
       const storedUsage = messageUsageMap.get(msg.id);
       if (storedUsage) {
         return { ...msg, usage: storedUsage };
       }
-      
+
       // Check if usage is in message metadata
       const msgAny = msg as any;
       if (msgAny.metadata?.usage) {
         return { ...msg, usage: msgAny.metadata.usage };
       }
-      
+
       return msg;
     });
   }, [streamingMessages, useStreaming, messageUsageMap]);
 
   // Use appropriate messages based on mode
-  const messages = useStreaming ? enhancedStreamingMessages : nonStreamingMessages;
+  const messages = useStreaming
+    ? enhancedStreamingMessages
+    : nonStreamingMessages;
 
   // Use appropriate error based on mode
   const error = useStreaming ? streamingError : nonStreamingError;

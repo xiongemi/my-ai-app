@@ -66,24 +66,24 @@ jobs:
           }
           EOF
           )
-          
+
           # Add apiKey if provided
           if [ -n "$AI_API_KEY" ]; then
             BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg key "$AI_API_KEY" '. + {"apiKey": $key}')
           fi
-          
+
           # Add model if provided
           if [ -n "$AI_MODEL" ]; then
             BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg model "$AI_MODEL" '. + {"model": $model}')
           fi
-          
+
           # Add fallbackModels if provided (for Vercel AI Gateway)
           if [ -n "$AI_FALLBACK_MODELS" ]; then
             # Convert comma-separated string to JSON array
             FALLBACK_ARRAY=$(echo "$AI_FALLBACK_MODELS" | jq -R -s -c 'split(",") | map(select(length > 0) | gsub("^\\s+|\\s+$"; ""))')
             BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --argjson fallbacks "$FALLBACK_ARRAY" '. + {"fallbackModels": $fallbacks}')
           fi
-          
+
           # Add GitHub token and PR URL for automatic comment posting
           # GITHUB_TOKEN is automatically provided by GitHub Actions
           GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
@@ -91,54 +91,54 @@ jobs:
             BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg token "$GITHUB_TOKEN" '. + {"githubToken": $token}')
             BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg url "$PR_URL" '. + {"prUrl": $url}')
           fi
-          
+
           REQUEST_PAYLOAD="$BASE_PAYLOAD"
 
           # Call the AI code review API (non-streaming)
           echo "Calling API endpoint: $API_ENDPOINT"
           echo "Request payload: $(echo "$REQUEST_PAYLOAD" | jq -c .)"
-          
+
           # Use curl with better error handling
           HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" -X POST "$API_ENDPOINT" \
             -H "Content-Type: application/json" \
             -d "$REQUEST_PAYLOAD")
-          
+
           REVIEW_RESPONSE=$(cat /tmp/response.json)
-          
+
           echo "HTTP Status Code: $HTTP_CODE"
           echo "Response (first 500 chars): ${REVIEW_RESPONSE:0:500}"
-          
+
           # Check HTTP status code
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
             echo "Error: API returned HTTP $HTTP_CODE"
             echo "Full response: $REVIEW_RESPONSE"
             exit 1
           fi
-          
+
           # Check if response is empty
           if [ -z "$REVIEW_RESPONSE" ]; then
             echo "Error: Empty response from API"
             exit 1
           fi
-          
+
           # Check if response is valid JSON
           if ! echo "$REVIEW_RESPONSE" | jq . > /dev/null 2>&1; then
             echo "Error: Invalid JSON response from API"
             echo "Response: $REVIEW_RESPONSE"
             exit 1
           fi
-          
+
           # Check if the API call returned an error
           if echo "$REVIEW_RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
             ERROR_MSG=$(echo "$REVIEW_RESPONSE" | jq -r '.error')
             echo "Error from API: $ERROR_MSG"
             exit 1
           fi
-          
+
           # Extract the review text from the response
           # The API returns { text: "...", usage: {...} } for non-streaming
           REVIEW_TEXT=$(echo "$REVIEW_RESPONSE" | jq -r '.text // empty')
-          
+
           if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" = "null" ]; then
             echo "Error: No review content received"
             echo "Full response: $REVIEW_RESPONSE"

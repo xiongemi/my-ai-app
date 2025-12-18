@@ -66,13 +66,8 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     fetchBilling();
-    // Set up interval to periodically refresh billing data as a backup
-    // This ensures billing stays updated even if refetch calls are missed
-    const interval = setInterval(() => {
-      fetchBilling();
-    }, 3000); // Refresh every 3 seconds to keep it updated
-
-    return () => clearInterval(interval);
+    // Billing data is refetched automatically after AI requests complete
+    // via refetch() calls in useAIChat and other components
   }, []);
 
   return (
@@ -81,4 +76,3 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     </BillingContext.Provider>
   );
 }
-

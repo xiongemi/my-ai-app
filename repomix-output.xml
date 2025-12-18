@@ -67,6 +67,7 @@ app/
   page.tsx
 components/
   AISettingsPanel.tsx
+  Billing.tsx
   MarkdownRenderer.tsx
   ThemeSwitcher.tsx
   VercelGatewayFallbackModels.tsx
@@ -100,186 +101,6 @@ tsconfig.json
 
 <files>
 This section contains the contents of the repository's files.
-
-<file path=".github/workflows/ai-code-review.yml">
-name: AI Code Review
-
-on:
-  pull_request:
-    types: [opened, synchronize]
-
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: AI Code Review
-        env:
-          API_ENDPOINT: ${{ secrets.AI_REVIEW_API_ENDPOINT }}
-          AI_API_KEY: ${{ secrets.AI_API_KEY }}
-          AI_PROVIDER: ${{ secrets.AI_PROVIDER }}
-          AI_MODEL: ${{ secrets.AI_MODEL }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # Get PR information
-          PR_URL="${{ github.event.pull_request.html_url }}"
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          REPO_OWNER="${{ github.repository_owner }}"
-          REPO_NAME="${{ github.event.repository.name }}"
-          
-          # Set defaults if not provided
-          AI_PROVIDER="${AI_PROVIDER:-openai}"
-          
-          echo "Reviewing PR: $PR_URL"
-          echo "Using provider: $AI_PROVIDER"
-          
-          # Prepare request payload
-          if [ -n "$AI_MODEL" ]; then
-            REQUEST_PAYLOAD=$(cat <<EOF
-          {
-            "messages": [
-              {
-                "role": "user",
-                "content": "Please review this pull request: $PR_URL"
-              }
-            ],
-            "provider": "$AI_PROVIDER",
-            "apiKey": "$AI_API_KEY",
-            "model": "$AI_MODEL",
-            "stream": false
-          }
-          EOF
-            )
-          else
-            REQUEST_PAYLOAD=$(cat <<EOF
-          {
-            "messages": [
-              {
-                "role": "user",
-                "content": "Please review this pull request: $PR_URL"
-              }
-            ],
-            "provider": "$AI_PROVIDER",
-            "apiKey": "$AI_API_KEY",
-            "stream": false
-          }
-          EOF
-            )
-          fi
-          
-          # Call the AI code review API (non-streaming)
-          echo "Calling API endpoint: $API_ENDPOINT"
-          REVIEW_RESPONSE=$(curl -s -X POST "$API_ENDPOINT" \
-            -H "Content-Type: application/json" \
-            -d "$REQUEST_PAYLOAD")
-          
-          # Extract the review text from the response
-          # The API returns { text: "...", usage: {...} } for non-streaming
-          REVIEW_TEXT=$(echo "$REVIEW_RESPONSE" | jq -r '.text // empty')
-          
-          if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" = "null" ]; then
-            echo "Error: No review content received"
-            echo "Response: $REVIEW_RESPONSE"
-            exit 1
-          fi
-          
-          # Get usage info if available
-          USAGE_INFO=""
-          if echo "$REVIEW_RESPONSE" | jq -e '.usage' > /dev/null 2>&1; then
-            PROMPT_TOKENS=$(echo "$REVIEW_RESPONSE" | jq -r '.usage.promptTokens // .usage.promptTokens // 0')
-            COMPLETION_TOKENS=$(echo "$REVIEW_RESPONSE" | jq -r '.usage.completionTokens // .usage.completionTokens // 0')
-            TOTAL_TOKENS=$(echo "$REVIEW_RESPONSE" | jq -r '.usage.totalTokens // .usage.totalTokens // 0')
-            if [ "$TOTAL_TOKENS" != "0" ]; then
-              USAGE_INFO="\n\n---\n**Usage:** $PROMPT_TOKENS prompt + $COMPLETION_TOKENS completion = $TOTAL_TOKENS tokens"
-            fi
-          fi
-          
-          # Post review as PR comment
-          COMMENT_BODY=$(cat <<EOF
-          ## 🤖 AI Code Review
-          
-          $REVIEW_TEXT$USAGE_INFO
-          EOF
-          )
-          
-          curl -X POST \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" \
-            -d "{\"body\": $(echo "$COMMENT_BODY" | jq -Rs .)}"
-          
-          echo "Review posted successfully!"
-</file>
-
-<file path=".github/workflows/README.md">
-# GitHub Actions Workflows
-
-## AI Code Review Workflow
-
-The `ai-code-review.yml` workflow automatically reviews pull requests using your AI code review API.
-
-### Setup
-
-1. **Deploy your AI Code Review app** to a publicly accessible URL (e.g., Vercel, Railway, etc.)
-
-2. **Configure GitHub Secrets** in your repository settings (Settings → Secrets and variables → Actions):
-   - `AI_REVIEW_API_ENDPOINT`: The full URL to your deployed API endpoint
-     - Example: `https://ai-agent-86bjedhz7-xiongemis-projects.vercel.app/api/codereview`
-   - `AI_API_KEY`: Your AI provider API key (OpenAI, Anthropic, etc.)
-   - `AI_PROVIDER`: (Optional) AI provider to use (default: `openai`). Options: `openai`, `gemini`, `anthropic`, `deepseek`, `qwen`, `vercel-ai-gateway`
-   - `AI_MODEL`: (Optional) Specific model to use. If not provided, uses the default model for the selected provider
-
-   **Example Configuration:**
-   ```
-   AI_REVIEW_API_ENDPOINT: https://ai-agent-86bjedhz7-xiongemis-projects.vercel.app/api/codereview
-   AI_API_KEY: sk-... (your OpenAI API key)
-   AI_PROVIDER: openai
-   ```
-
-### How it Works
-
-1. Triggers automatically on:
-   - Pull request opened
-   - Pull request updated (new commits pushed)
-
-2. The workflow:
-   - Checks out the PR code
-   - Calls your AI code review API with the PR URL
-   - Posts the review as a comment on the PR
-
-### Example Configuration
-
-```yaml
-# In your workflow file, you can customize:
-env:
-  AI_PROVIDER: 'openai'  # or 'anthropic', 'gemini', etc.
-  AI_MODEL: 'gpt-4'      # optional, uses default if not specified
-```
-
-### Customization
-
-You can customize the workflow by:
-- Changing the trigger events
-- Modifying the system prompt
-- Adding additional review criteria
-- Customizing the comment format
-
-### Troubleshooting
-
-- **API endpoint not found**: Make sure `AI_REVIEW_API_ENDPOINT` secret is set correctly
-- **No review posted**: Check the workflow logs for API errors
-- **Authentication errors**: Verify your `AI_API_KEY` secret is correct
-</file>
 
 <file path="public/file.svg">
 <svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
@@ -538,77 +359,6 @@ describe('Models', () => {
 });
 </file>
 
-<file path="__tests__/providers.test.ts">
-import {
-  providerConfigs,
-  getEnvApiKey,
-  type ProviderId,
-} from '@/lib/providers';
-
-describe('Providers', () => {
-  describe('providerConfigs', () => {
-    it('should have all expected providers', () => {
-      const expectedProviders: ProviderId[] = [
-        'openai',
-        'gemini',
-        'anthropic',
-        'deepseek',
-        'qwen',
-        'vercel-ai-gateway',
-      ];
-
-      expectedProviders.forEach((provider) => {
-        expect(providerConfigs[provider]).toBeDefined();
-        expect(providerConfigs[provider]).toHaveProperty('createProvider');
-        expect(providerConfigs[provider]).toHaveProperty('defaultModel');
-      });
-    });
-
-    it('should create provider with API key', () => {
-      const testApiKey = 'test-api-key-123';
-      const provider = providerConfigs.openai.createProvider(testApiKey);
-      expect(provider).toBeDefined();
-    });
-  });
-
-  describe('getEnvApiKey', () => {
-    it('should return undefined when env var is not set', () => {
-      // Clear the env var for testing
-      const originalEnv = process.env.OPENAI_API_KEY;
-      delete process.env.OPENAI_API_KEY;
-
-      const apiKey = getEnvApiKey('openai');
-      expect(apiKey).toBeUndefined();
-
-      // Restore original env
-      if (originalEnv) {
-        process.env.OPENAI_API_KEY = originalEnv;
-      }
-    });
-
-    it('should map provider IDs to correct env var names', () => {
-      const testCases: Array<{ provider: ProviderId; expectedEnv: string }> = [
-        { provider: 'openai', expectedEnv: 'OPENAI_API_KEY' },
-        { provider: 'gemini', expectedEnv: 'GOOGLE_GENERATIVE_AI_API_KEY' },
-        { provider: 'anthropic', expectedEnv: 'ANTHROPIC_API_KEY' },
-        { provider: 'deepseek', expectedEnv: 'DEEPSEEK_API_KEY' },
-        { provider: 'qwen', expectedEnv: 'QWEN_API_KEY' },
-        {
-          provider: 'vercel-ai-gateway',
-          expectedEnv: 'VERCEL_AI_GATEWAY_API_KEY',
-        },
-      ];
-
-      testCases.forEach(({ provider, expectedEnv }) => {
-        // This test verifies the mapping exists, not that the env var is set
-        const envKey = expectedEnv;
-        expect(envKey).toBeDefined();
-      });
-    });
-  });
-});
-</file>
-
 <file path="__tests__/ThemeSwitcher.test.tsx">
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
@@ -631,6 +381,149 @@ describe('ThemeSwitcher', () => {
     expect(document.body).toBeInTheDocument();
   });
 });
+</file>
+
+<file path=".github/workflows/README.md">
+# GitHub Actions Workflows
+
+## AI Code Review Workflow
+
+The `ai-code-review.yml` workflow automatically reviews pull requests using your AI code review API.
+
+### Setup
+
+1. **Deploy your AI Code Review app** to a publicly accessible URL (e.g., Vercel, Railway, etc.)
+
+2. **Configure GitHub Secrets** in your repository settings (Settings → Secrets and variables → Actions):
+   - `AI_REVIEW_API_ENDPOINT`: The full URL to your deployed API endpoint
+     - Example: `https://ai-agent-86bjedhz7-xiongemis-projects.vercel.app/api/codereview`
+   - `AI_API_KEY`: Your AI provider API key (OpenAI, Anthropic, etc.)
+   - `AI_PROVIDER`: (Optional) AI provider to use (default: `openai`). Options: `openai`, `gemini`, `anthropic`, `deepseek`, `qwen`, `vercel-ai-gateway`
+   - `AI_MODEL`: (Optional) Specific model to use. If not provided, uses the default model for the selected provider
+
+   **Example Configuration:**
+
+   ```
+   AI_REVIEW_API_ENDPOINT: https://ai-agent-86bjedhz7-xiongemis-projects.vercel.app/api/codereview
+   AI_API_KEY: sk-... (your OpenAI API key)
+   AI_PROVIDER: openai
+   ```
+
+### How it Works
+
+1. Triggers automatically on:
+   - Pull request opened
+   - Pull request updated (new commits pushed)
+
+2. The workflow:
+   - Checks out the PR code
+   - Calls your AI code review API with the PR URL
+   - Posts the review as a comment on the PR
+
+### Example Configuration
+
+```yaml
+# In your workflow file, you can customize:
+env:
+  AI_PROVIDER: 'openai' # or 'anthropic', 'gemini', etc.
+  AI_MODEL: 'gpt-4' # optional, uses default if not specified
+```
+
+### Customization
+
+You can customize the workflow by:
+
+- Changing the trigger events
+- Modifying the system prompt
+- Adding additional review criteria
+- Customizing the comment format
+
+### Troubleshooting
+
+- **API endpoint not found**: Make sure `AI_REVIEW_API_ENDPOINT` secret is set correctly
+- **No review posted**: Check the workflow logs for API errors
+- **Authentication errors**: Verify your `AI_API_KEY` secret is correct
+</file>
+
+<file path="components/Billing.tsx">
+'use client';
+
+import React, { useState, useEffect } from 'react';
+
+export interface BillingData {
+  totalCost: number;
+  totalTokens?: number;
+  usageHistory: Array<{
+    timestamp: string;
+    model: string;
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    cost: number;
+  }>;
+}
+
+// Create a context for billing data so it can be shared across components
+const BillingContext = React.createContext<{
+  billingData: BillingData | null;
+  refetch: () => Promise<void>;
+} | null>(null);
+
+// Hook to fetch billing data - uses context if available, otherwise creates its own state
+export function useBilling() {
+  const context = React.useContext(BillingContext);
+
+  // If context exists, use it
+  if (context) {
+    return context;
+  }
+
+  // Otherwise, create local state (for backward compatibility)
+  const [billingData, setBillingData] = useState<BillingData | null>(null);
+
+  const fetchBilling = async () => {
+    try {
+      const response = await fetch('/api/billing');
+      const data = await response.json();
+      setBillingData(data);
+    } catch (e) {
+      console.error('Failed to fetch billing data', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchBilling();
+  }, []);
+
+  return { billingData, refetch: fetchBilling };
+}
+
+// Provider component to share billing state
+export function BillingProvider({ children }: { children: React.ReactNode }) {
+  const [billingData, setBillingData] = useState<BillingData | null>(null);
+
+  const fetchBilling = async () => {
+    try {
+      const response = await fetch('/api/billing');
+      const data = await response.json();
+      setBillingData(data);
+    } catch (e) {
+      console.error('Failed to fetch billing data', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchBilling();
+    // Billing data is refetched automatically after AI requests complete
+    // via refetch() calls in useAIChat and other components
+  }, []);
+
+  return (
+    <BillingContext.Provider value={{ billingData, refetch: fetchBilling }}>
+      {children}
+    </BillingContext.Provider>
+  );
+}
 </file>
 
 <file path="components/MarkdownRenderer.tsx">
@@ -857,199 +750,6 @@ export function useVercelGatewayFallbackModels(): [
 }
 </file>
 
-<file path="lib/ai-handler.ts">
-import {
-  streamText,
-  generateText,
-  convertToModelMessages,
-  UIMessage,
-  stepCountIs,
-  type LanguageModel,
-  type ToolSet,
-  type StopCondition,
-} from 'ai';
-import { NextResponse } from 'next/server';
-import { providerConfigs, ProviderId, getEnvApiKey } from '@/lib/providers';
-import { deductCredits, getCredits } from '@/lib/billing';
-
-export interface AIHandlerOptions {
-  messages: UIMessage[] | Array<{ role: string; content: string }>;
-  provider?: ProviderId;
-  apiKey?: string;
-  model?: string;
-  stream?: boolean;
-  systemPrompt?: string;
-  tools?: ToolSet;
-  stopWhen?: StopCondition<any> | Array<StopCondition<any>>;
-  enableUsageMetadata?: boolean; // Whether to include usage in streaming response metadata
-  logPrefix?: string; // Prefix for log messages
-  enableStepLogging?: boolean; // Whether to log tool calls and results
-}
-
-export async function handleAIRequest(options: AIHandlerOptions) {
-  const {
-    messages: rawMessages,
-    provider: providerId = 'openai',
-    apiKey,
-    model: requestedModel,
-    stream = true,
-    systemPrompt,
-    tools,
-    stopWhen,
-    enableUsageMetadata = false,
-    logPrefix = 'AI',
-    enableStepLogging = false,
-  } = options;
-
-  // Check credits
-  if (getCredits() <= 0) {
-    return NextResponse.json(
-      { error: 'Insufficient credits' },
-      { status: 402 },
-    );
-  }
-
-  // Validate messages
-  if (!rawMessages || !Array.isArray(rawMessages)) {
-    return NextResponse.json(
-      { error: 'Messages are required and must be an array' },
-      { status: 400 },
-    );
-  }
-
-  // Convert messages to ModelMessage[] format
-  // Streaming sends UIMessage[] format, non-streaming sends {role, content} format
-  const messages = stream
-    ? convertToModelMessages(rawMessages as UIMessage[])
-    : (rawMessages as Array<{ role: string; content: string }>).map((m) => ({
-        role: m.role as 'user' | 'assistant' | 'system',
-        content: m.content,
-      }));
-
-  // Validate provider
-  if (!providerConfigs[providerId]) {
-    return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
-  }
-
-  const config = providerConfigs[providerId];
-
-  // Log for debugging
-  console.log(
-    `[${logPrefix}] Provider: ${providerId}, Model: ${requestedModel || config.defaultModel}, Stream: ${stream}, Has API Key: ${!!apiKey}`,
-  );
-
-  // Get API key from request or environment
-  const resolvedApiKey = apiKey || getEnvApiKey(providerId);
-
-  if (!resolvedApiKey) {
-    return NextResponse.json(
-      {
-        error: `No API key provided for ${providerId}. Please add it in Settings.`,
-      },
-      { status: 400 },
-    );
-  }
-
-  // Log for debugging
-  console.log(
-    `[${logPrefix}] Requested model: ${requestedModel || config.defaultModel}, API key source: ${apiKey ? 'request body' : 'environment'}`,
-  );
-
-  const provider = config.createProvider(resolvedApiKey);
-  const modelName = requestedModel || config.defaultModel;
-  // Type assertion: providers return LanguageModelV1 | LanguageModelV2, but streamText expects LanguageModel
-  const model = provider(modelName) as any as LanguageModel;
-
-  if (stream) {
-    // Streaming mode
-    const result = streamText({
-      model,
-      system: systemPrompt,
-      ...(tools && { tools }),
-      messages,
-      ...(stopWhen && { stopWhen }),
-      onFinish: ({ usage, finishReason }) => {
-        console.log(
-          `[${logPrefix}] Stream finished. Reason: ${finishReason}, Tokens: ${usage.inputTokens}/${usage.outputTokens}`,
-        );
-        deductCredits(
-          modelName,
-          usage.inputTokens ?? 0,
-          usage.outputTokens ?? 0,
-        );
-      },
-      ...(enableStepLogging && {
-        onStepFinish: ({ text, toolCalls, toolResults, finishReason }) => {
-          if (toolCalls && toolCalls.length > 0) {
-            console.log(
-              `[${logPrefix}] Tool calls made: ${toolCalls.map((tc) => tc.toolName).join(', ')}`,
-            );
-          }
-          if (toolResults && toolResults.length > 0) {
-            console.log(
-              `[${logPrefix}] Tool results received: ${toolResults.length} results, Step finish reason: ${finishReason}`,
-            );
-          }
-        },
-      }),
-    });
-
-    return result.toUIMessageStreamResponse({
-      ...(enableUsageMetadata && {
-        messageMetadata: ({ part }) => {
-          // Include usage information when available
-          if (part.type === 'finish') {
-            return {
-              usage: {
-                promptTokens: part.totalUsage?.inputTokens ?? 0,
-                completionTokens: part.totalUsage?.outputTokens ?? 0,
-                totalTokens:
-                  part.totalUsage?.totalTokens ??
-                  (part.totalUsage?.inputTokens ?? 0) +
-                    (part.totalUsage?.outputTokens ?? 0),
-              },
-            };
-          }
-          return undefined;
-        },
-      }),
-      onFinish: ({ messages, responseMessage }) => {
-        console.log(
-          `[${logPrefix}] Stream completed. Response message ID: ${responseMessage.id}`,
-        );
-      },
-    });
-  } else {
-    // Non-streaming mode - better for usage tracking
-    const result = await generateText({
-      model,
-      system: systemPrompt,
-      ...(tools && { tools }),
-      messages,
-    });
-
-    // Accurate usage tracking - AI SDK v5 uses inputTokens/outputTokens
-    const promptTokens = result.usage.inputTokens ?? 0;
-    const completionTokens = result.usage.outputTokens ?? 0;
-    const billingResult = deductCredits(
-      modelName,
-      promptTokens,
-      completionTokens,
-    );
-
-    return NextResponse.json({
-      text: result.text,
-      usage: {
-        promptTokens,
-        completionTokens,
-        totalTokens: promptTokens + completionTokens,
-      },
-      billing: billingResult,
-    });
-  }
-}
-</file>
-
 <file path="lib/models.ts">
 import modelsConfig from './models.json';
 
@@ -1145,63 +845,77 @@ const config = {
 export default config;
 </file>
 
-<file path="lib/providers.ts">
-import { createOpenAI } from '@ai-sdk/openai';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createDeepSeek } from '@ai-sdk/deepseek';
-import { createQwen } from 'qwen-ai-provider';
-import { getDefaultModel } from '@/lib/models';
+<file path="__tests__/providers.test.ts">
+import {
+  providerConfigs,
+  getEnvApiKey,
+  type ProviderId,
+} from '@/lib/providers';
 
-// Provider configurations - exported for reuse
-export const providerConfigs = {
-  openai: {
-    createProvider: (apiKey: string) => createOpenAI({ apiKey }),
-    defaultModel: getDefaultModel('openai'),
-  },
-  gemini: {
-    createProvider: (apiKey: string) => createGoogleGenerativeAI({ apiKey }),
-    defaultModel: getDefaultModel('gemini'),
-  },
-  anthropic: {
-    createProvider: (apiKey: string) => createAnthropic({ apiKey }),
-    defaultModel: getDefaultModel('anthropic'),
-  },
-  deepseek: {
-    createProvider: (apiKey: string) =>
-      createDeepSeek({
-        apiKey,
-        baseURL: 'https://api.deepseek.com',
-      }),
-    defaultModel: getDefaultModel('deepseek'),
-  },
-  qwen: {
-    createProvider: (apiKey: string) => createQwen({ apiKey }),
-    defaultModel: getDefaultModel('qwen'),
-  },
-  'vercel-ai-gateway': {
-    createProvider: (apiKey: string) =>
-      createOpenAI({
-        apiKey,
-        baseURL: 'https://ai-gateway.vercel.sh/v1',
-      }),
-    defaultModel: getDefaultModel('vercel-ai-gateway'),
-  },
-};
+describe('Providers', () => {
+  describe('providerConfigs', () => {
+    it('should have all expected providers', () => {
+      const expectedProviders: ProviderId[] = [
+        'openai',
+        'gemini',
+        'anthropic',
+        'deepseek',
+        'qwen',
+        'cohere',
+        'vercel-ai-gateway',
+      ];
 
-export type ProviderId = keyof typeof providerConfigs;
+      expectedProviders.forEach((provider) => {
+        expect(providerConfigs[provider]).toBeDefined();
+        expect(providerConfigs[provider]).toHaveProperty('createProvider');
+        expect(providerConfigs[provider]).toHaveProperty('defaultModel');
+      });
+    });
 
-export function getEnvApiKey(providerId: ProviderId): string | undefined {
-  const envKeys: Record<ProviderId, string> = {
-    openai: 'OPENAI_API_KEY',
-    gemini: 'GOOGLE_GENERATIVE_AI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
-    deepseek: 'DEEPSEEK_API_KEY',
-    qwen: 'QWEN_API_KEY',
-    'vercel-ai-gateway': 'VERCEL_AI_GATEWAY_API_KEY',
-  };
-  return process.env[envKeys[providerId]];
-}
+    it('should create provider with API key', () => {
+      const testApiKey = 'test-api-key-123';
+      const provider = providerConfigs.openai.createProvider(testApiKey);
+      expect(provider).toBeDefined();
+    });
+  });
+
+  describe('getEnvApiKey', () => {
+    it('should return undefined when env var is not set', () => {
+      // Clear the env var for testing
+      const originalEnv = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+
+      const apiKey = getEnvApiKey('openai');
+      expect(apiKey).toBeUndefined();
+
+      // Restore original env
+      if (originalEnv) {
+        process.env.OPENAI_API_KEY = originalEnv;
+      }
+    });
+
+    it('should map provider IDs to correct env var names', () => {
+      const testCases: Array<{ provider: ProviderId; expectedEnv: string }> = [
+        { provider: 'openai', expectedEnv: 'OPENAI_API_KEY' },
+        { provider: 'gemini', expectedEnv: 'GOOGLE_GENERATIVE_AI_API_KEY' },
+        { provider: 'anthropic', expectedEnv: 'ANTHROPIC_API_KEY' },
+        { provider: 'deepseek', expectedEnv: 'DEEPSEEK_API_KEY' },
+        { provider: 'qwen', expectedEnv: 'QWEN_API_KEY' },
+        { provider: 'cohere', expectedEnv: 'COHERE_API_KEY' },
+        {
+          provider: 'vercel-ai-gateway',
+          expectedEnv: 'VERCEL_AI_GATEWAY_API_KEY',
+        },
+      ];
+
+      testCases.forEach(({ provider, expectedEnv }) => {
+        // This test verifies the mapping exists, not that the env var is set
+        const envKey = expectedEnv;
+        expect(envKey).toBeDefined();
+      });
+    });
+  });
+});
 </file>
 
 <file path="jest.config.ts">
@@ -1511,16 +1225,6 @@ const config: Config = {
 export default config;
 </file>
 
-<file path="app/api/billing/route.ts">
-import { getCredits } from '@/lib/billing';
-import { NextResponse } from 'next/server';
-
-export function GET() {
-  const credits = getCredits();
-  return NextResponse.json({ credits });
-}
-</file>
-
 <file path="components/ThemeSwitcher.tsx">
 'use client';
 
@@ -1554,6 +1258,785 @@ const ThemeSwitcher = () => {
 export default ThemeSwitcher;
 </file>
 
+<file path="lib/providers.ts">
+import { createOpenAI } from '@ai-sdk/openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createDeepSeek } from '@ai-sdk/deepseek';
+import { createQwen } from 'qwen-ai-provider';
+import { createCohere } from '@ai-sdk/cohere';
+import { getDefaultModel } from '@/lib/models';
+
+// Provider configurations - exported for reuse
+export const providerConfigs = {
+  openai: {
+    createProvider: (apiKey: string) => createOpenAI({ apiKey }),
+    defaultModel: getDefaultModel('openai'),
+  },
+  gemini: {
+    createProvider: (apiKey: string) => createGoogleGenerativeAI({ apiKey }),
+    defaultModel: getDefaultModel('gemini'),
+  },
+  anthropic: {
+    createProvider: (apiKey: string) => createAnthropic({ apiKey }),
+    defaultModel: getDefaultModel('anthropic'),
+  },
+  deepseek: {
+    createProvider: (apiKey: string) =>
+      createDeepSeek({
+        apiKey,
+        baseURL: 'https://api.deepseek.com',
+      }),
+    defaultModel: getDefaultModel('deepseek'),
+  },
+  qwen: {
+    createProvider: (apiKey: string) => createQwen({ apiKey }),
+    defaultModel: getDefaultModel('qwen'),
+  },
+  cohere: {
+    createProvider: (apiKey: string) => createCohere({ apiKey }),
+    defaultModel: getDefaultModel('cohere'),
+  },
+  'vercel-ai-gateway': {
+    createProvider: (apiKey: string) =>
+      createOpenAI({
+        apiKey,
+        baseURL: 'https://ai-gateway.vercel.sh/v1',
+      }),
+    defaultModel: getDefaultModel('vercel-ai-gateway'),
+  },
+};
+
+export type ProviderId = keyof typeof providerConfigs;
+
+export function getEnvApiKey(providerId: ProviderId): string | undefined {
+  const envKeys: Record<ProviderId, string> = {
+    openai: 'OPENAI_API_KEY',
+    gemini: 'GOOGLE_GENERATIVE_AI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+    deepseek: 'DEEPSEEK_API_KEY',
+    qwen: 'QWEN_API_KEY',
+    cohere: 'COHERE_API_KEY',
+    'vercel-ai-gateway': 'VERCEL_AI_GATEWAY_API_KEY',
+  };
+  return process.env[envKeys[providerId]];
+}
+</file>
+
+<file path=".github/workflows/ai-code-review.yml">
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: AI Code Review
+        env:
+          # Required: API endpoint for the code review service
+          API_ENDPOINT: ${{ secrets.AI_REVIEW_API_ENDPOINT }}
+          # Optional: API key for the AI provider (if not provided, server-side keys will be used)
+          # Recommended to set this if your API endpoint doesn't have server-side keys configured
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          # Optional: AI provider (defaults to 'openai' if not set)
+          # Use 'vercel-ai-gateway' to use Vercel AI Gateway
+          AI_PROVIDER: ${{ secrets.AI_PROVIDER }}
+          # Optional: Specific model to use (uses provider default if not set)
+          AI_MODEL: ${{ secrets.AI_MODEL }}
+          # Optional: Fallback models for Vercel AI Gateway (comma-separated list)
+          # Example: "openai/gpt-4,anthropic/claude-3-opus"
+          AI_FALLBACK_MODELS: ${{ secrets.AI_FALLBACK_MODELS }}
+          # GITHUB_TOKEN is automatically provided by GitHub Actions - no need to set it as a secret
+          # It's available as ${{ secrets.GITHUB_TOKEN }} or via the GITHUB_TOKEN environment variable
+        run: |
+          # Get PR information
+          PR_URL="${{ github.event.pull_request.html_url }}"
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+
+          # Set defaults if not provided
+          AI_PROVIDER="${AI_PROVIDER:-openai}"
+
+          echo "Reviewing PR: $PR_URL"
+          echo "Using provider: $AI_PROVIDER"
+
+          # Prepare request payload
+          # Note: apiKey is optional - if not provided, the API will use server-side stored keys
+          # For GitHub Actions, it's recommended to provide the API key via secrets
+          # Build base payload
+          BASE_PAYLOAD=$(cat <<EOF
+          {
+            "messages": [
+              {
+                "role": "user",
+                "content": "Please review this pull request: $PR_URL"
+              }
+            ],
+            "provider": "$AI_PROVIDER",
+            "stream": false
+          }
+          EOF
+          )
+          
+          # Add apiKey if provided
+          if [ -n "$AI_API_KEY" ]; then
+            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg key "$AI_API_KEY" '. + {"apiKey": $key}')
+          fi
+          
+          # Add model if provided
+          if [ -n "$AI_MODEL" ]; then
+            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg model "$AI_MODEL" '. + {"model": $model}')
+          fi
+          
+          # Add fallbackModels if provided (for Vercel AI Gateway)
+          if [ -n "$AI_FALLBACK_MODELS" ]; then
+            # Convert comma-separated string to JSON array
+            FALLBACK_ARRAY=$(echo "$AI_FALLBACK_MODELS" | jq -R -s -c 'split(",") | map(select(length > 0) | gsub("^\\s+|\\s+$"; ""))')
+            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --argjson fallbacks "$FALLBACK_ARRAY" '. + {"fallbackModels": $fallbacks}')
+          fi
+          
+          # Add GitHub token and PR URL for automatic comment posting
+          # GITHUB_TOKEN is automatically provided by GitHub Actions
+          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          if [ -n "$GITHUB_TOKEN" ]; then
+            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg token "$GITHUB_TOKEN" '. + {"githubToken": $token}')
+            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg url "$PR_URL" '. + {"prUrl": $url}')
+          fi
+          
+          REQUEST_PAYLOAD="$BASE_PAYLOAD"
+
+          # Call the AI code review API (non-streaming)
+          echo "Calling API endpoint: $API_ENDPOINT"
+          echo "Request payload: $(echo "$REQUEST_PAYLOAD" | jq -c .)"
+          
+          # Use curl with better error handling
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" -X POST "$API_ENDPOINT" \
+            -H "Content-Type: application/json" \
+            -d "$REQUEST_PAYLOAD")
+          
+          REVIEW_RESPONSE=$(cat /tmp/response.json)
+          
+          echo "HTTP Status Code: $HTTP_CODE"
+          echo "Response (first 500 chars): ${REVIEW_RESPONSE:0:500}"
+          
+          # Check HTTP status code
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Error: API returned HTTP $HTTP_CODE"
+            echo "Full response: $REVIEW_RESPONSE"
+            exit 1
+          fi
+          
+          # Check if response is empty
+          if [ -z "$REVIEW_RESPONSE" ]; then
+            echo "Error: Empty response from API"
+            exit 1
+          fi
+          
+          # Check if response is valid JSON
+          if ! echo "$REVIEW_RESPONSE" | jq . > /dev/null 2>&1; then
+            echo "Error: Invalid JSON response from API"
+            echo "Response: $REVIEW_RESPONSE"
+            exit 1
+          fi
+          
+          # Check if the API call returned an error
+          if echo "$REVIEW_RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+            ERROR_MSG=$(echo "$REVIEW_RESPONSE" | jq -r '.error')
+            echo "Error from API: $ERROR_MSG"
+            exit 1
+          fi
+          
+          # Extract the review text from the response
+          # The API returns { text: "...", usage: {...} } for non-streaming
+          REVIEW_TEXT=$(echo "$REVIEW_RESPONSE" | jq -r '.text // empty')
+          
+          if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" = "null" ]; then
+            echo "Error: No review content received"
+            echo "Full response: $REVIEW_RESPONSE"
+            echo "Response structure: $(echo "$REVIEW_RESPONSE" | jq 'keys')"
+            exit 1
+          fi
+
+          # If githubToken was provided, the API automatically posted the comment
+          # Otherwise, we would need to post it manually here (but that's not needed anymore)
+          if [ -n "$GITHUB_TOKEN" ]; then
+            echo "Review completed! Comment should be automatically posted to PR #$PR_NUMBER"
+          else
+            echo "Review completed! (No GitHub token provided, comment not posted)"
+          fi
+</file>
+
+<file path="app/api/billing/route.ts">
+import { getCredits, getUsageHistory } from '@/lib/billing';
+import { NextResponse } from 'next/server';
+
+export function GET() {
+  const credits = getCredits();
+  const usageHistory = getUsageHistory();
+  
+  // Calculate total cost from usage history
+  const totalCost = usageHistory.reduce((sum, entry) => sum + entry.cost, 0);
+  
+  // Calculate total tokens consumed
+  const totalTokens = usageHistory.reduce((sum, entry) => sum + entry.totalTokens, 0);
+  
+  return NextResponse.json({
+    credits,
+    totalCost,
+    totalTokens,
+    usageHistory: usageHistory.map((entry) => ({
+      timestamp: entry.timestamp.toISOString(),
+      model: entry.model,
+      promptTokens: entry.promptTokens,
+      completionTokens: entry.completionTokens,
+      totalTokens: entry.totalTokens,
+      cost: entry.cost,
+    })),
+  });
+}
+</file>
+
+<file path="lib/ai-handler.ts">
+import {
+  streamText,
+  generateText,
+  convertToModelMessages,
+  UIMessage,
+  stepCountIs,
+  type LanguageModel,
+  type ToolSet,
+  type StopCondition,
+} from 'ai';
+import { NextResponse } from 'next/server';
+import { providerConfigs, ProviderId, getEnvApiKey } from '@/lib/providers';
+import { deductCredits, getCredits } from '@/lib/billing';
+
+export interface AIHandlerOptions {
+  messages: UIMessage[] | Array<{ role: string; content: string }>;
+  provider?: ProviderId;
+  apiKey?: string;
+  model?: string;
+  stream?: boolean;
+  systemPrompt?: string;
+  tools?: ToolSet;
+  stopWhen?: StopCondition<any> | Array<StopCondition<any>>;
+  enableUsageMetadata?: boolean; // Whether to include usage in streaming response metadata
+  logPrefix?: string; // Prefix for log messages
+  enableStepLogging?: boolean; // Whether to log tool calls and results
+  contextFileHash?: string; // Hash of context file for cache key generation
+  fallbackModels?: string[]; // Fallback models for Vercel AI Gateway (providerOptions.gateway.models)
+}
+
+export async function handleAIRequest(options: AIHandlerOptions) {
+  const {
+    messages: rawMessages,
+    provider: providerId = 'openai',
+    apiKey,
+    model: requestedModel,
+    stream = true,
+    systemPrompt,
+    tools,
+    stopWhen,
+    enableUsageMetadata = false,
+    logPrefix = 'AI',
+    enableStepLogging = false,
+    contextFileHash,
+    fallbackModels,
+  } = options;
+
+  // Check credits
+  if (getCredits() <= 0) {
+    return NextResponse.json(
+      { error: 'Insufficient credits' },
+      { status: 402 },
+    );
+  }
+
+  // Validate messages
+  if (!rawMessages || !Array.isArray(rawMessages)) {
+    return NextResponse.json(
+      { error: 'Messages are required and must be an array' },
+      { status: 400 },
+    );
+  }
+
+  // Convert messages to ModelMessage[] format
+  // For streaming: rawMessages is UIMessage[] format
+  // For non-streaming: rawMessages is Array<{ role: string; content: string }> format
+  // Normalize to UIMessage[] format first, then convert to ModelMessage[]
+  let normalizedMessages: UIMessage[];
+  
+  if (stream) {
+    // Streaming mode already sends UIMessage[] format
+    normalizedMessages = rawMessages as UIMessage[];
+  } else {
+    // Non-streaming mode sends simple format, convert to UIMessage[] format
+    // UIMessage can have either 'content' (string) or 'parts' (array)
+    normalizedMessages = (rawMessages as Array<{ role: string; content: string }>).map(
+      (m) => ({
+        id: `msg-${Date.now()}-${Math.random()}`,
+        role: m.role as 'user' | 'assistant' | 'system',
+        parts: [{ type: 'text' as const, text: m.content }],
+      }),
+    ) as unknown as UIMessage[];
+  }
+
+  let messages = convertToModelMessages(normalizedMessages);
+
+  // Cohere requires messages to have either content or tool calls
+  // Filter out messages that have neither (which shouldn't happen, but be safe)
+  if (providerId === 'cohere') {
+    messages = messages.filter((m, i) => {
+      // Check if content exists and is non-empty (handle string or array types)
+      const contentStr =
+        typeof m.content === 'string'
+          ? m.content
+          : Array.isArray(m.content)
+            ? m.content
+                .map((p: any) => (p.type === 'text' ? p.text : ''))
+                .join('')
+            : '';
+      const hasContent = !!contentStr && contentStr.trim().length > 0;
+      const hasToolCalls = !!(m as any).toolCalls?.length;
+      const hasToolResults = !!(m as any).toolResults?.length;
+      const isValid = hasContent || hasToolCalls || hasToolResults;
+
+      if (!isValid) {
+        console.warn(
+          `[${logPrefix}] Filtering out invalid message at index ${i}: no content, tool calls, or tool results`,
+        );
+      }
+
+      return isValid;
+    });
+
+    // Log messages for debugging
+    console.log(
+      `[${logPrefix}] Converted messages (${messages.length} valid):`,
+      JSON.stringify(
+        messages.map((m, i) => {
+          const contentStr =
+            typeof m.content === 'string'
+              ? m.content
+              : Array.isArray(m.content)
+                ? m.content
+                    .map((p: any) => (p.type === 'text' ? p.text : ''))
+                    .join('')
+                : '';
+          return {
+            index: i,
+            role: m.role,
+            hasContent: !!contentStr && contentStr.length > 0,
+            contentLength: contentStr.length,
+            hasToolCalls: !!(m as any).toolCalls?.length,
+            hasToolResults: !!(m as any).toolResults?.length,
+          };
+        }),
+        null,
+        2,
+      ),
+    );
+  }
+
+  // Validate provider
+  if (!providerConfigs[providerId]) {
+    return NextResponse.json({ error: 'Invalid provider' }, { status: 400 });
+  }
+
+  const config = providerConfigs[providerId];
+
+  // Log for debugging
+  console.log(
+    `[${logPrefix}] Provider: ${providerId}, Model: ${requestedModel || config.defaultModel}, Stream: ${stream}, Has API Key: ${!!apiKey}`,
+  );
+
+  // Get API key from request or environment
+  const resolvedApiKey = apiKey || getEnvApiKey(providerId);
+
+  if (!resolvedApiKey) {
+    return NextResponse.json(
+      {
+        error: `No API key provided for ${providerId}. Please add it in Settings.`,
+      },
+      { status: 400 },
+    );
+  }
+
+  // Log for debugging
+  console.log(
+    `[${logPrefix}] Requested model: ${requestedModel || config.defaultModel}, API key source: ${apiKey ? 'request body' : 'environment'}`,
+  );
+
+  const provider = config.createProvider(resolvedApiKey);
+  const modelName = requestedModel || config.defaultModel;
+  // Type assertion: providers return LanguageModelV1 | LanguageModelV2, but streamText expects LanguageModel
+  const model = provider(modelName) as any as LanguageModel;
+
+  // Provider-level caching explanation:
+  // - OpenAI automatically caches responses when the exact same prompt is sent
+  // - If contextFileHash is unchanged AND user query is identical, the full prompt (system + messages) will be identical
+  // - OpenAI will then return cached responses automatically (faster + cheaper)
+  // - The contextFileHash helps track when context changes, ensuring cache invalidation when needed
+  // Note: Some providers may require explicit cache headers/options, but OpenAI's caching is automatic for identical prompts
+  if (contextFileHash) {
+    console.log(
+      `[${logPrefix}] Context file hash: ${contextFileHash.substring(0, 8)}... (caching enabled when prompt is identical)`,
+    );
+  }
+
+  if (stream) {
+    // Streaming mode
+    // Store usage from onFinish to use in messageMetadata
+    let streamUsage: { inputTokens: number; outputTokens: number } | null = null;
+
+    const result = streamText({
+      model,
+      system: systemPrompt,
+      ...(tools && { tools }),
+      messages,
+      ...(stopWhen && { stopWhen }),
+      // Add providerOptions for Vercel AI Gateway fallback models
+      ...(providerId === 'vercel-ai-gateway' &&
+        fallbackModels &&
+        fallbackModels.length > 0 && {
+          providerOptions: {
+            gateway: {
+              models: fallbackModels,
+            },
+          },
+        }),
+      onFinish: ({ usage, finishReason }) => {
+        console.log(
+          `[${logPrefix}] Stream finished. Reason: ${finishReason}, Tokens: ${usage.inputTokens}/${usage.outputTokens}`,
+        );
+        // Store usage for messageMetadata
+        streamUsage = {
+          inputTokens: usage.inputTokens ?? 0,
+          outputTokens: usage.outputTokens ?? 0,
+        };
+        deductCredits(
+          modelName,
+          usage.inputTokens ?? 0,
+          usage.outputTokens ?? 0,
+        );
+      },
+      ...(enableStepLogging && {
+        onStepFinish: ({ text, toolCalls, toolResults, finishReason }) => {
+          if (toolCalls && toolCalls.length > 0) {
+            console.log(
+              `[${logPrefix}] Tool calls made: ${toolCalls.map((tc) => tc.toolName).join(', ')}`,
+            );
+          }
+          if (toolResults && toolResults.length > 0) {
+            console.log(
+              `[${logPrefix}] Tool results received: ${toolResults.length} results, Step finish reason: ${finishReason}`,
+            );
+          }
+        },
+      }),
+    });
+
+    return result.toUIMessageStreamResponse({
+      ...(enableUsageMetadata && {
+        messageMetadata: ({ part }) => {
+          // Include usage information when available
+          if (part.type === 'finish') {
+            // Log what's available in part
+            console.log(
+              `[${logPrefix}] messageMetadata called for finish part:`,
+              JSON.stringify({
+                hasTotalUsage: !!part.totalUsage,
+                totalUsage: part.totalUsage,
+                hasStreamUsage: !!streamUsage,
+                streamUsage,
+              }),
+            );
+
+            // Try to get usage from part.totalUsage first, then fall back to stored streamUsage
+            const usage = part.totalUsage
+              ? {
+                  promptTokens: part.totalUsage.inputTokens ?? 0,
+                  completionTokens: part.totalUsage.outputTokens ?? 0,
+                  totalTokens:
+                    part.totalUsage.totalTokens ??
+                    (part.totalUsage.inputTokens ?? 0) +
+                      (part.totalUsage.outputTokens ?? 0),
+                }
+              : streamUsage
+                ? {
+                    promptTokens: streamUsage.inputTokens,
+                    completionTokens: streamUsage.outputTokens,
+                    totalTokens:
+                      streamUsage.inputTokens + streamUsage.outputTokens,
+                  }
+                : {
+                    promptTokens: 0,
+                    completionTokens: 0,
+                    totalTokens: 0,
+                  };
+
+            console.log(
+              `[${logPrefix}] Attaching usage metadata to message:`,
+              JSON.stringify(usage),
+            );
+
+            return { usage };
+          }
+          return undefined;
+        },
+      }),
+      onFinish: ({ messages, responseMessage }) => {
+        console.log(
+          `[${logPrefix}] Stream completed. Response message ID: ${responseMessage.id}`,
+        );
+        // Log usage if available in the response message
+        if (enableUsageMetadata && (responseMessage as any).usage) {
+          console.log(
+            `[${logPrefix}] Usage attached to response message:`,
+            (responseMessage as any).usage,
+          );
+        } else if (enableUsageMetadata && streamUsage) {
+          console.log(
+            `[${logPrefix}] Usage was available but not attached. Stream usage:`,
+            streamUsage,
+          );
+        }
+      },
+    });
+  } else {
+    // Non-streaming mode - better for usage tracking
+    try {
+      const result = await generateText({
+        model,
+        system: systemPrompt,
+        ...(tools && { tools }),
+        messages,
+        ...(stopWhen && { stopWhen }), // Include stopWhen for non-streaming too
+        // Add providerOptions for Vercel AI Gateway fallback models
+        ...(providerId === 'vercel-ai-gateway' &&
+          fallbackModels &&
+          fallbackModels.length > 0 && {
+            providerOptions: {
+              gateway: {
+                models: fallbackModels,
+              },
+            },
+          }),
+      });
+
+      // Log result for debugging
+      console.log(
+        `[${logPrefix}] Non-streaming result:`,
+        JSON.stringify({
+          hasText: !!result.text,
+          textLength: result.text?.length ?? 0,
+          textPreview: result.text?.substring(0, 100) ?? 'N/A',
+          finishReason: result.finishReason,
+          stepsCount: (result as any).steps?.length ?? 0,
+          usage: result.usage,
+        }),
+      );
+
+      // Extract text from result - check both result.text and steps
+      let finalText = result.text || '';
+      
+      // If no text but we have steps, try to extract text from the last step
+      if (!finalText && (result as any).steps) {
+        const steps = (result as any).steps;
+        // Look for text in the last step's content
+        const lastStep = steps[steps.length - 1];
+        if (lastStep?.content) {
+          // Extract text parts from content array
+          const textParts = lastStep.content
+            .filter((part: any) => part.type === 'text')
+            .map((part: any) => part.text)
+            .join('');
+          if (textParts) {
+            finalText = textParts;
+            console.log(
+              `[${logPrefix}] Extracted text from steps: ${textParts.length} chars`,
+            );
+          }
+        }
+      }
+
+      // If still no text and finishReason is tool-calls, the model made tool calls but hasn't generated final response
+      if (!finalText && result.finishReason === 'tool-calls') {
+        console.warn(
+          `[${logPrefix}] Model made tool calls but no final text generated. This might indicate the model needs more steps.`,
+        );
+        finalText =
+          'The model processed your request and made tool calls, but the final response is not yet available. Please try using streaming mode for better tool call handling.';
+      }
+
+      // Accurate usage tracking - AI SDK v5 uses inputTokens/outputTokens
+      const promptTokens = result.usage.inputTokens ?? 0;
+      const completionTokens = result.usage.outputTokens ?? 0;
+      const billingResult = deductCredits(
+        modelName,
+        promptTokens,
+        completionTokens,
+      );
+
+      return NextResponse.json({
+        text: finalText,
+        usage: {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        },
+        billing: billingResult,
+      });
+    } catch (error: any) {
+      // Handle citation parsing errors where the API returns valid text but citations format doesn't match SDK expectations
+      // Some providers (like Cohere) return citations with tool_output instead of document field
+      // The error.value contains the raw API response with the actual text
+      // Error structure: AI_APICallError -> cause: [Error[AI_TypeValidationError]] -> value: {message, usage}
+      
+      // Log error structure for debugging
+      console.log(`[${logPrefix}] Caught error:`, {
+        errorName: error?.name,
+        errorMessage: error?.message?.substring(0, 100),
+        hasValue: !!error?.value,
+        hasMessage: !!error?.value?.message,
+        hasContent: !!error?.value?.message?.content,
+        contentIsArray: Array.isArray(error?.value?.message?.content),
+        hasCitations: !!error?.value?.message?.citations,
+        hasResponseBody: !!error?.responseBody,
+      });
+
+      // Try to get the response data from error.value or parse from responseBody
+      let responseData = error?.value;
+      if (!responseData?.message?.content && error?.responseBody) {
+        try {
+          responseData = JSON.parse(error.responseBody);
+          console.log(`[${logPrefix}] Parsed responseBody to get response data`);
+        } catch (e) {
+          console.warn(`[${logPrefix}] Failed to parse responseBody:`, e);
+        }
+      }
+
+      const hasValueWithMessage =
+        responseData?.message?.content &&
+        Array.isArray(responseData.message.content);
+
+      // If we have valid response data (error.value.message.content), extract the text
+      // This handles citation parsing errors where the API returns valid text but citations format doesn't match SDK expectations
+      if (hasValueWithMessage) {
+        console.log(
+          `[${logPrefix}] Error handler check:`,
+          JSON.stringify({
+            hasValueWithMessage,
+            hasInvalidJson: error?.message?.includes('Invalid JSON response'),
+            hasCitations: !!responseData?.message?.citations,
+            willExtract: true,
+          }),
+        );
+        console.log(
+          `[${logPrefix}] Detected citation error with valid response data - extracting text`,
+        );
+        console.warn(
+          `[${logPrefix}] Citation format mismatch detected, extracting text manually from response data`,
+        );
+
+        // Extract text from the API response format
+        const apiMessage = responseData.message;
+        let extractedText = '';
+
+        if (Array.isArray(apiMessage.content)) {
+          extractedText = apiMessage.content
+            .filter((part: any) => part.type === 'text')
+            .map((part: any) => part.text)
+            .join('');
+        }
+
+        if (extractedText) {
+          // Extract usage from response data if available
+          // Cohere uses: usage.tokens.input_tokens / usage.tokens.output_tokens
+          // Some providers use input_tokens/output_tokens format, others use inputTokens/outputTokens
+          const usage = responseData?.usage?.tokens || responseData?.usage;
+          const promptTokens =
+            usage?.input_tokens ??
+            usage?.inputTokens ??
+            responseData?.usage?.billed_units?.input_tokens ??
+            0;
+          const completionTokens =
+            usage?.output_tokens ??
+            usage?.outputTokens ??
+            responseData?.usage?.billed_units?.output_tokens ??
+            0;
+
+          console.log(
+            `[${logPrefix}] Extracted text from API response: ${extractedText.length} chars, tokens: ${promptTokens}/${completionTokens}`,
+          );
+
+          const billingResult = deductCredits(
+            modelName,
+            promptTokens,
+            completionTokens,
+          );
+
+          return NextResponse.json({
+            text: extractedText,
+            usage: {
+              promptTokens,
+              completionTokens,
+              totalTokens: promptTokens + completionTokens,
+            },
+            billing: billingResult,
+          });
+        } else {
+          console.warn(
+            `[${logPrefix}] Failed to extract text from error.value.message.content`,
+            {
+              contentLength: apiMessage.content?.length ?? 0,
+              contentTypes: apiMessage.content?.map((p: any) => p?.type),
+            },
+          );
+        }
+      }
+
+      console.error(`[${logPrefix}] Error in generateText:`, error);
+      // Log the error structure for debugging
+      if (error?.value) {
+        console.error(
+          `[${logPrefix}] Error value structure:`,
+          JSON.stringify(
+            {
+              hasMessage: !!error.value.message,
+              hasContent: !!error.value.message?.content,
+              hasUsage: !!error.value.usage,
+              errorName: error.name,
+              errorMessage: error.message,
+              causeCount: error.cause?.length ?? 0,
+              causeTypes: error.cause?.map((c: any) => c?.name || c?.code),
+            },
+            null,
+            2,
+          ),
+        );
+      }
+      throw error;
+    }
+  }
+}
+</file>
+
 <file path="lib/billing.ts">
 // In a real-world application, this data should be stored in a database.
 // This is a simulation for demonstration purposes.
@@ -1579,6 +2062,34 @@ export const modelCosts: Record<string, { input: number; output: number }> = {
   'qwen-plus': {
     input: 0.0008 / 1000,
     output: 0.002 / 1000,
+  },
+  'command-a-03-2025': {
+    input: 0.003 / 1000,
+    output: 0.015 / 1000,
+  },
+  'command-r-plus-08-2024': {
+    input: 0.003 / 1000,
+    output: 0.015 / 1000,
+  },
+  'command-r-08-2024': {
+    input: 0.0005 / 1000,
+    output: 0.0015 / 1000,
+  },
+  'command-r7b-12-2024': {
+    input: 0.0003 / 1000,
+    output: 0.0012 / 1000,
+  },
+  'command-a-reasoning-08-2025': {
+    input: 0.003 / 1000,
+    output: 0.015 / 1000,
+  },
+  'command-a-vision-07-2025': {
+    input: 0.003 / 1000,
+    output: 0.015 / 1000,
+  },
+  'command-a-translate-08-2025': {
+    input: 0.002 / 1000,
+    output: 0.008 / 1000,
   },
 };
 
@@ -1622,6 +2133,120 @@ export function getCredits() {
 
 export function getUsageHistory() {
   return usageHistory;
+}
+</file>
+
+<file path="app/globals.css">
+@import 'tailwindcss';
+
+/* Enable class-based dark mode for next-themes */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Markdown content styles */
+.markdown-content * {
+  line-height: 1;
+}
+
+.markdown-content h1 {
+  @apply text-2xl font-bold text-zinc-900 dark:text-zinc-100;
+  border-bottom: 1px solid rgb(228 228 231 / 0.5);
+}
+
+.markdown-content h2 {
+  @apply text-xl font-semibold text-zinc-900 dark:text-zinc-100;
+  border-bottom: 1px solid rgb(228 228 231 / 0.3);
+}
+
+.markdown-content h3 {
+  @apply text-lg font-semibold text-zinc-900 dark:text-zinc-100;
+}
+
+.markdown-content h4 {
+  @apply text-base font-semibold text-zinc-900 dark:text-zinc-100;
+}
+
+.markdown-content h5,
+.markdown-content h6 {
+  @apply text-sm font-semibold text-zinc-900 dark:text-zinc-100;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  @apply ml-6;
+}
+
+.markdown-content ul {
+  @apply list-disc;
+}
+
+.markdown-content ol {
+  @apply list-decimal;
+}
+
+.markdown-content blockquote {
+  @apply border-l-4 border-zinc-300 dark:border-zinc-700 pl-4 italic text-zinc-600 dark:text-zinc-400;
+}
+
+.markdown-content code {
+  @apply bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-sm font-mono text-zinc-900 dark:text-zinc-100;
+}
+
+.markdown-content pre {
+  @apply bg-zinc-100 dark:bg-zinc-800 p-3 rounded-lg overflow-x-auto;
+  margin: 0;
+}
+
+.markdown-content pre code {
+  @apply bg-transparent p-0;
+}
+
+.markdown-content a {
+  @apply text-blue-600 dark:text-blue-400 hover:underline;
+}
+
+.markdown-content strong {
+  @apply font-semibold text-zinc-900 dark:text-zinc-100;
+}
+
+.markdown-content em {
+  @apply italic;
+}
+
+.markdown-content hr {
+  @apply border-zinc-300 dark:border-zinc-700;
+}
+
+.markdown-content table {
+  @apply w-full border-collapse;
+}
+
+.markdown-content th,
+.markdown-content td {
+  @apply border border-zinc-300 dark:border-zinc-700 px-4 py-2;
+}
+
+.markdown-content th {
+  @apply bg-zinc-100 dark:bg-zinc-800 font-semibold text-zinc-900 dark:text-zinc-100;
+}
+
+.markdown-content img {
+  @apply max-w-full h-auto rounded-lg;
 }
 </file>
 
@@ -1741,6 +2366,46 @@ export function getUsageHistory() {
         "description": "Faster model"
       },
       { "id": "qwen-max", "name": "Qwen Max", "description": "Most capable" }
+    ]
+  },
+  "cohere": {
+    "defaultModel": "command-r7b-12-2024",
+    "models": [
+      {
+        "id": "command-a-03-2025",
+        "name": "Command A",
+        "description": "Most performant model, excels at tool use, agents, RAG, and multilingual (256K context)"
+      },
+      {
+        "id": "command-r-plus-08-2024",
+        "name": "Command R+",
+        "description": "Best suited for complex RAG workflows and multi-step tool use (128K context)"
+      },
+      {
+        "id": "command-r-08-2024",
+        "name": "Command R",
+        "description": "Instruction-following conversational model for complex workflows (128K context)"
+      },
+      {
+        "id": "command-r7b-12-2024",
+        "name": "Command R7B",
+        "description": "Small, fast model for RAG, tool use, and agents (128K context)"
+      },
+      {
+        "id": "command-a-reasoning-08-2025",
+        "name": "Command A Reasoning",
+        "description": "Reasoning model for nuanced problem-solving and agent-based tasks (256K context)"
+      },
+      {
+        "id": "command-a-vision-07-2025",
+        "name": "Command A Vision",
+        "description": "Multimodal model for analyzing charts, graphs, diagrams, OCR, and document Q&A (128K context)"
+      },
+      {
+        "id": "command-a-translate-08-2025",
+        "name": "Command A Translate",
+        "description": "State-of-the-art machine translation model for 23 languages (8K context)"
+      }
     ]
   },
   "vercel-ai-gateway": {
@@ -1866,6 +2531,7 @@ const defaultProviders: ApiKeyConfig[] = [
   { id: 'deepseek', name: 'DeepSeek', placeholder: 'sk-...', key: '' },
   { id: 'anthropic', name: 'Anthropic', placeholder: 'sk-ant-...', key: '' },
   { id: 'qwen', name: 'Qwen (Alibaba)', placeholder: 'sk-...', key: '' },
+  { id: 'cohere', name: 'Cohere', placeholder: 'co_...', key: '' },
   {
     id: 'vercel-ai-gateway',
     name: 'Vercel AI Gateway',
@@ -1878,6 +2544,7 @@ export default function SettingsPage() {
   const [providers, setProviders] = useState<ApiKeyConfig[]>(defaultProviders);
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
+  const [githubToken, setGithubToken] = useState('');
 
   useEffect(() => {
     // Load saved keys from localStorage
@@ -1891,6 +2558,10 @@ export default function SettingsPage() {
             key: parsed[p.id] || '',
           })),
         );
+        // Load GitHub token if present
+        if (parsed.githubToken) {
+          setGithubToken(parsed.githubToken);
+        }
       } catch (e) {
         console.error('Failed to parse saved keys', e);
       }
@@ -1909,10 +2580,14 @@ export default function SettingsPage() {
   };
 
   const handleSave = () => {
-    const keysToSave = providers.reduce(
+    const keysToSave: Record<string, string> = providers.reduce(
       (acc, p) => ({ ...acc, [p.id]: p.key }),
-      {},
+      {} as Record<string, string>,
     );
+    // Include GitHub token in saved keys
+    if (githubToken) {
+      keysToSave.githubToken = githubToken;
+    }
     localStorage.setItem('ai-api-keys', JSON.stringify(keysToSave));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -1980,6 +2655,59 @@ export default function SettingsPage() {
             ))}
           </div>
 
+          <p className="text-xs text-zinc-500 dark:text-zinc-500">
+            API keys are stored locally in your browser. They are never sent to
+            our servers.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
+            <Sparkles size={20} />
+            <h2 className="text-xl font-medium">GitHub Integration</h2>
+          </div>
+
+          <div className="flex flex-col gap-2 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+            <label
+              htmlFor="github-token"
+              className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              GitHub Token
+            </label>
+            <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-2">
+              Required for GitHub Actions workflow to post PR comments. Create a
+              personal access token with{' '}
+              <code className="px-1 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded">
+                repo
+              </code>{' '}
+              scope.
+            </p>
+            <div className="relative flex items-center">
+              <input
+                id="github-token"
+                type={visibleKeys['github-token'] ? 'text' : 'password'}
+                value={githubToken}
+                onChange={(e) => {
+                  setGithubToken(e.target.value);
+                  setSaved(false);
+                }}
+                placeholder="ghp_..."
+                className="w-full px-3 py-2 pr-10 text-sm border border-zinc-300 dark:border-zinc-700 rounded-md bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <button
+                type="button"
+                onClick={() => toggleVisibility('github-token')}
+                className="absolute right-2 p-1 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              >
+                {visibleKeys['github-token'] ? (
+                  <EyeOff size={18} />
+                ) : (
+                  <Eye size={18} />
+                )}
+              </button>
+            </div>
+          </div>
+
           <button
             onClick={handleSave}
             className="flex items-center justify-center gap-2 w-full sm:w-fit px-6 py-3 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
@@ -1987,11 +2715,6 @@ export default function SettingsPage() {
             <Save size={16} />
             {saved ? 'Saved!' : 'Save API Keys'}
           </button>
-
-          <p className="text-xs text-zinc-500 dark:text-zinc-500">
-            API keys are stored locally in your browser. They are never sent to
-            our servers.
-          </p>
         </div>
       </div>
     </div>
@@ -2013,6 +2736,7 @@ import {
   VercelGatewayFallbackModels,
   useVercelGatewayFallbackModels,
 } from './VercelGatewayFallbackModels';
+import { useBilling } from './Billing';
 
 export const providers = [
   { id: 'openai', name: 'OpenAI' },
@@ -2020,6 +2744,7 @@ export const providers = [
   { id: 'anthropic', name: 'Anthropic (Claude)' },
   { id: 'deepseek', name: 'DeepSeek' },
   { id: 'qwen', name: 'Qwen (Alibaba)' },
+  { id: 'cohere', name: 'Cohere' },
   { id: 'vercel-ai-gateway', name: 'Vercel AI Gateway' },
 ];
 
@@ -2034,18 +2759,6 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   usage?: UsageInfo;
-}
-
-export interface BillingData {
-  totalCost: number;
-  usageHistory: Array<{
-    timestamp: string;
-    model: string;
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-    cost: number;
-  }>;
 }
 
 interface AISettingsPanelProps {
@@ -2071,7 +2784,8 @@ export function AISettingsPanel({
   fallbackModels,
   onFallbackModelsChange,
 }: AISettingsPanelProps) {
-  const [billingData, setBillingData] = useState<BillingData | null>(null);
+  // Use the shared useBilling hook instead of local state
+  const { billingData, refetch: refetchBilling } = useBilling();
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [internalFallbackModels, setInternalFallbackModels] =
     useVercelGatewayFallbackModels();
@@ -2099,19 +2813,7 @@ export function AISettingsPanel({
     }
   };
 
-  const fetchBilling = async () => {
-    try {
-      const response = await fetch('/api/billing');
-      const data = await response.json();
-      setBillingData(data);
-    } catch (e) {
-      console.error('Failed to fetch billing data', e);
-    }
-  };
-
   useEffect(() => {
-    fetchBilling();
-
     // Load API keys from localStorage
     const savedKeys = localStorage.getItem('ai-api-keys');
     if (savedKeys) {
@@ -2129,12 +2831,22 @@ export function AISettingsPanel({
     <div className="flex flex-col gap-4">
       {/* Credits/Cost Display */}
       {showCredits && billingData && (
-        <p className="text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-          Total Cost:{' '}
-          <span className="font-semibold text-black dark:text-white">
-            ${billingData?.totalCost?.toFixed(4) ?? 0}
-          </span>
-        </p>
+        <div className="flex flex-col gap-1">
+          <p className="text-lg leading-8 text-zinc-600 dark:text-zinc-400">
+            Estimated Cost:{' '}
+            <span className="font-semibold text-black dark:text-white">
+              ${billingData?.totalCost?.toFixed(4) ?? 0}
+            </span>
+          </p>
+          {billingData.totalTokens !== undefined && (
+            <p className="text-sm text-zinc-500 dark:text-zinc-500">
+              Estimated Tokens:{' '}
+              <span className="font-semibold text-zinc-700 dark:text-zinc-300">
+                {billingData.totalTokens.toLocaleString()}
+              </span>
+            </p>
+          )}
+        </div>
       )}
 
       {/* Provider Selector */}
@@ -2251,27 +2963,6 @@ export function useApiKeys() {
 
   return apiKeys;
 }
-
-// Hook to fetch billing data
-export function useBilling() {
-  const [billingData, setBillingData] = useState<BillingData | null>(null);
-
-  const fetchBilling = async () => {
-    try {
-      const response = await fetch('/api/billing');
-      const data = await response.json();
-      setBillingData(data);
-    } catch (e) {
-      console.error('Failed to fetch billing data', e);
-    }
-  };
-
-  useEffect(() => {
-    fetchBilling();
-  }, []);
-
-  return { billingData, refetch: fetchBilling };
-}
 </file>
 
 <file path="hooks/useAIChat.ts">
@@ -2280,7 +2971,8 @@ export function useBilling() {
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useApiKeys, useBilling, Message } from '@/components/AISettingsPanel';
+import { useApiKeys, Message } from '@/components/AISettingsPanel';
+import { useBilling } from '@/components/Billing';
 import { getDefaultModel } from '@/lib/models';
 
 interface UseAIChatOptions {
@@ -2314,6 +3006,10 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
   const [streamingErrorState, setStreamingErrorState] = useState<Error | null>(
     null,
   );
+  // Track usage for streaming messages - map message ID to usage
+  const [messageUsageMap, setMessageUsageMap] = useState<
+    Map<string, { promptTokens: number; completionTokens: number; totalTokens: number }>
+  >(new Map());
 
   const apiKeys = useApiKeys();
   const { billingData, refetch: refetchBilling } = useBilling();
@@ -2381,7 +3077,19 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
       console.error('Streaming error:', error);
       setStreamingErrorState(error);
     },
-    onFinish: () => {
+    onFinish: ({ message }) => {
+      // Try to extract usage from message metadata if available
+      // The messageMetadata callback should attach usage, but if it's not preserved,
+      // we'll need to get it from the stream response headers or track it separately
+      console.log('[Frontend Streaming] Stream finished, message:', {
+        id: message.id,
+        hasUsage: 'usage' in message,
+        usage: (message as any).usage,
+        messageKeys: Object.keys(message),
+        // Check for metadata
+        hasMetadata: 'metadata' in message,
+        metadata: (message as any).metadata,
+      });
       refetchBilling();
     },
   });
@@ -2396,6 +3104,26 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
 
   const isStreamingLoading = status === 'streaming' || status === 'submitted';
   const isLoading = useStreaming ? isStreamingLoading : isNonStreamingLoading;
+
+  // Debug: Check if usage metadata is attached to streaming messages
+  useEffect(() => {
+    if (useStreaming && streamingMessages.length > 0) {
+      const lastMessage = streamingMessages[streamingMessages.length - 1];
+      if (lastMessage.role === 'assistant') {
+        const msgAny = lastMessage as any;
+        console.log('[Frontend Streaming] Message check:', {
+          messageId: lastMessage.id,
+          hasUsage: 'usage' in lastMessage,
+          usage: msgAny.usage,
+          hasMetadata: 'metadata' in lastMessage,
+          metadata: msgAny.metadata,
+          messageKeys: Object.keys(lastMessage),
+          // Check all properties
+          allProps: Object.keys(msgAny),
+        });
+      }
+    }
+  }, [streamingMessages, useStreaming]);
 
   // Non-streaming submit handler
   const handleNonStreamingSubmit = useCallback(async () => {
@@ -2436,16 +3164,42 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
         body: JSON.stringify(requestBody),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        const text = await response.text();
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        throw new Error(
+          `Failed to parse response: ${response.status} ${response.statusText}`,
+        );
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+        throw new Error(
+          data.error ||
+            data.message ||
+            `HTTP error! status: ${response.status}`,
+        );
+      }
+
+      // Log response data for debugging
+      console.log('[Frontend Non-Streaming] Response data:', {
+        hasText: !!data.text,
+        textLength: data.text?.length ?? 0,
+        textPreview: data.text?.substring(0, 100) ?? 'N/A',
+        usage: data.usage,
+      });
+
+      if (!data.text || data.text.trim().length === 0) {
+        console.warn(
+          '[Frontend Non-Streaming] Warning: Empty or missing text in response',
+        );
       }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.text,
+        content: data.text || 'No response received from the model.',
         usage: data.usage,
       };
 
@@ -2496,8 +3250,35 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     ],
   );
 
+  // Enhance streaming messages with usage if available
+  // Since messageMetadata might not be preserved by useChat, we'll manually add usage
+  const enhancedStreamingMessages = useMemo(() => {
+    if (!useStreaming) return streamingMessages;
+    
+    return streamingMessages.map((msg) => {
+      // If message already has usage, return as-is
+      if ('usage' in msg && msg.usage) {
+        return msg;
+      }
+      
+      // Check if we have stored usage for this message
+      const storedUsage = messageUsageMap.get(msg.id);
+      if (storedUsage) {
+        return { ...msg, usage: storedUsage };
+      }
+      
+      // Check if usage is in message metadata
+      const msgAny = msg as any;
+      if (msgAny.metadata?.usage) {
+        return { ...msg, usage: msgAny.metadata.usage };
+      }
+      
+      return msg;
+    });
+  }, [streamingMessages, useStreaming, messageUsageMap]);
+
   // Use appropriate messages based on mode
-  const messages = useStreaming ? streamingMessages : nonStreamingMessages;
+  const messages = useStreaming ? enhancedStreamingMessages : nonStreamingMessages;
 
   // Use appropriate error based on mode
   const error = useStreaming ? streamingError : nonStreamingError;
@@ -2531,120 +3312,6 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     handleSubmit,
     clearError,
   };
-}
-</file>
-
-<file path="app/globals.css">
-@import 'tailwindcss';
-
-/* Enable class-based dark mode for next-themes */
-@custom-variant dark (&:where(.dark, .dark *));
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-.dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-/* Markdown content styles */
-.markdown-content * {
-  line-height: 1;
-}
-
-.markdown-content h1 {
-  @apply text-2xl font-bold text-zinc-900 dark:text-zinc-100;
-  border-bottom: 1px solid rgb(228 228 231 / 0.5);
-}
-
-.markdown-content h2 {
-  @apply text-xl font-semibold text-zinc-900 dark:text-zinc-100;
-  border-bottom: 1px solid rgb(228 228 231 / 0.3);
-}
-
-.markdown-content h3 {
-  @apply text-lg font-semibold text-zinc-900 dark:text-zinc-100;
-}
-
-.markdown-content h4 {
-  @apply text-base font-semibold text-zinc-900 dark:text-zinc-100;
-}
-
-.markdown-content h5,
-.markdown-content h6 {
-  @apply text-sm font-semibold text-zinc-900 dark:text-zinc-100;
-}
-
-.markdown-content ul,
-.markdown-content ol {
-  @apply ml-6;
-}
-
-.markdown-content ul {
-  @apply list-disc;
-}
-
-.markdown-content ol {
-  @apply list-decimal;
-}
-
-.markdown-content blockquote {
-  @apply border-l-4 border-zinc-300 dark:border-zinc-700 pl-4 italic text-zinc-600 dark:text-zinc-400;
-}
-
-.markdown-content code {
-  @apply bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded text-sm font-mono text-zinc-900 dark:text-zinc-100;
-}
-
-.markdown-content pre {
-  @apply bg-zinc-100 dark:bg-zinc-800 p-3 rounded-lg overflow-x-auto;
-  margin: 0;
-}
-
-.markdown-content pre code {
-  @apply bg-transparent p-0;
-}
-
-.markdown-content a {
-  @apply text-blue-600 dark:text-blue-400 hover:underline;
-}
-
-.markdown-content strong {
-  @apply font-semibold text-zinc-900 dark:text-zinc-100;
-}
-
-.markdown-content em {
-  @apply italic;
-}
-
-.markdown-content hr {
-  @apply border-zinc-300 dark:border-zinc-700;
-}
-
-.markdown-content table {
-  @apply w-full border-collapse;
-}
-
-.markdown-content th,
-.markdown-content td {
-  @apply border border-zinc-300 dark:border-zinc-700 px-4 py-2;
-}
-
-.markdown-content th {
-  @apply bg-zinc-100 dark:bg-zinc-800 font-semibold text-zinc-900 dark:text-zinc-100;
-}
-
-.markdown-content img {
-  @apply max-w-full h-auto rounded-lg;
 }
 </file>
 
@@ -2821,7 +3488,7 @@ export default function ChatPage() {
               <strong className="text-zinc-900 dark:text-zinc-100">
                 {m.role === 'user' ? 'You' : currentProvider?.name || 'AI'}
               </strong>
-              {/* Show usage for non-streaming messages */}
+              {/* Show usage for both streaming and non-streaming messages */}
               {'usage' in m && m.usage && (
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">
                   {m.usage.promptTokens} prompt + {m.usage.completionTokens}{' '}
@@ -2866,6 +3533,7 @@ export default function ChatPage() {
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.56",
+    "@ai-sdk/cohere": "^2.0.21",
     "@ai-sdk/deepseek": "^1.0.32",
     "@ai-sdk/google": "^2.0.47",
     "@ai-sdk/openai": "^2.0.87",
@@ -2940,7 +3608,7 @@ export async function POST(req: Request) {
       tools: enableTools ? codeTools : undefined,
       // Allow up to 10 steps for chat (less than codereview since it's simpler)
       stopWhen: enableTools ? stepCountIs(10) : undefined,
-      enableUsageMetadata: false,
+      enableUsageMetadata: true, // Include usage in streaming response for UI display
       logPrefix: 'Chat',
     });
   } catch (error) {
@@ -2957,6 +3625,7 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { ThemeProvider } from 'next-themes';
 import ThemeSwitcher from '../components/ThemeSwitcher';
+import { BillingProvider } from '../components/Billing';
 import Link from 'next/link';
 import { Code, MessageCircle, Settings } from 'lucide-react';
 import './globals.css';
@@ -2987,38 +3656,42 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen bg-zinc-50 dark:bg-black`}
       >
         <ThemeProvider attribute="class">
-          <header className="w-full border-b border-zinc-200 dark:border-zinc-800">
-            <div className="flex items-center justify-between h-16 px-4 mx-auto max-w-7xl sm:px-6 lg:px-8">
-              <h1 className="text-2xl font-bold text-black dark:text-white">
-                <Link href="/">AI Agent</Link>
-              </h1>
-              <div className="flex items-center gap-4">
-                <Link
-                  href="/"
-                  className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
-                >
-                  <Code size={16} />
-                  Code Review
-                </Link>
-                <Link
-                  href="/chat"
-                  className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
-                >
-                  <MessageCircle size={16} />
-                  Chat
-                </Link>
-                <ThemeSwitcher />
-                <Link
-                  href="/settings"
-                  className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
-                >
-                  <Settings size={16} />
-                  Settings
-                </Link>
+          <BillingProvider>
+            <header className="w-full border-b border-zinc-200 dark:border-zinc-800">
+              <div className="flex items-center justify-between h-16 px-4 mx-auto max-w-7xl sm:px-6 lg:px-8">
+                <div className="flex items-center gap-6">
+                  <h1 className="text-2xl font-bold text-black dark:text-white">
+                    <Link href="/">AI Agent</Link>
+                  </h1>
+                  <Link
+                    href="/"
+                    className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
+                  >
+                    <Code size={16} />
+                    Code Review
+                  </Link>
+                  <Link
+                    href="/chat"
+                    className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
+                  >
+                    <MessageCircle size={16} />
+                    Chat
+                  </Link>
+                </div>
+                <div className="flex items-center gap-4">
+                  <ThemeSwitcher />
+                  <Link
+                    href="/settings"
+                    className="flex items-center gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-400 hover:text-black dark:hover:text-white"
+                  >
+                    <Settings size={16} />
+                    Settings
+                  </Link>
+                </div>
               </div>
-            </div>
-          </header>
-          <main className="flex flex-col flex-1">{children}</main>
+            </header>
+            <main className="flex flex-col flex-1">{children}</main>
+          </BillingProvider>
         </ThemeProvider>
       </body>
     </html>
@@ -3029,8 +3702,16 @@ export default function RootLayout({
 <file path="app/page.tsx">
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Code, GitPullRequest, AlertCircle, X, Sparkles } from 'lucide-react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import {
+  Code,
+  GitPullRequest,
+  AlertCircle,
+  X,
+  Sparkles,
+  FileText,
+  Upload,
+} from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
@@ -3038,21 +3719,83 @@ import { useVercelGatewayFallbackModels } from '@/components/VercelGatewayFallba
 
 type InputMode = 'file' | 'pr';
 
+// Simple hash function for file content (for caching purposes)
+async function hashFileContent(content: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Generic system prompt that works for both modes
+const GENERIC_SYSTEM_PROMPT =
+  'You are a code reviewer. You will be given either a file path or a GitHub pull request URL, and you will review the code accordingly. For file paths, review the single file. For pull requests, review all changed files in the PR.';
+
 export default function Home() {
   const [inputMode, setInputMode] = useState<InputMode>('file');
-  const [systemPrompt, setSystemPrompt] = useState(
-    'You are a code reviewer. You will be given a file path and you will review the code in that file.',
-  );
+  const [systemPrompt, setSystemPrompt] = useState(GENERIC_SYSTEM_PROMPT);
+  const [hasCustomPrompt, setHasCustomPrompt] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fallbackModels, setFallbackModels] = useVercelGatewayFallbackModels();
+  const [contextFile, setContextFile] = useState<{
+    name: string;
+    content: string;
+    hash: string;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Update system prompt when input mode changes (only if user hasn't customized it)
+  useEffect(() => {
+    if (!hasCustomPrompt) {
+      setSystemPrompt(GENERIC_SYSTEM_PROMPT);
+    }
+  }, [inputMode, hasCustomPrompt]);
+
+  // Handle file upload
+  const handleFileUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      try {
+        const content = await file.text();
+        const hash = await hashFileContent(content);
+        setContextFile({
+          name: file.name,
+          content,
+          hash,
+        });
+      } catch (error) {
+        console.error('Error reading file:', error);
+        alert('Failed to read file. Please try again.');
+      }
+    },
+    [],
+  );
+
+  // Remove context file
+  const handleRemoveContextFile = useCallback(() => {
+    setContextFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
 
   // Use useCallback so the function reference is stable
   const getExtraBody = useCallback(
     () => ({
       systemPrompt,
       ...(fallbackModels.length > 0 && { fallbackModels }),
+      ...(contextFile && {
+        contextFile: {
+          name: contextFile.name,
+          content: contextFile.content,
+          hash: contextFile.hash, // Include hash for future caching
+        },
+      }),
     }),
-    [systemPrompt, fallbackModels],
+    [systemPrompt, fallbackModels, contextFile],
   );
 
   const {
@@ -3083,7 +3826,7 @@ export default function Home() {
           AI Code Reviewer
         </h1>
         <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-          Enter the path to a file to have it reviewed by an AI agent.
+          Enter a file path or GitHub PR URL to have it reviewed by an AI agent.
         </p>
       </div>
 
@@ -3121,11 +3864,66 @@ export default function Home() {
                 </label>
                 <textarea
                   value={systemPrompt}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  onChange={(e) => {
+                    setSystemPrompt(e.target.value);
+                    setHasCustomPrompt(true);
+                  }}
                   placeholder="Enter a custom system prompt for code review..."
                   rows={3}
                   className="w-full p-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 resize-none"
                 />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSystemPrompt(GENERIC_SYSTEM_PROMPT);
+                    setHasCustomPrompt(false);
+                  }}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 w-fit"
+                >
+                  Reset to default
+                </button>
+              </div>
+
+              {/* Context File Upload */}
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Repository Context File (Optional)
+                </label>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Upload a file containing repository context (e.g.,
+                  documentation, architecture overview) to help the AI
+                  understand your codebase better.
+                </p>
+                {contextFile ? (
+                  <div className="flex items-center gap-2 p-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+                    <FileText
+                      size={16}
+                      className="text-zinc-600 dark:text-zinc-400"
+                    />
+                    <span className="flex-1 text-sm text-zinc-900 dark:text-zinc-100 truncate">
+                      {contextFile.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRemoveContextFile}
+                      className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors">
+                    <Upload size={16} />
+                    <span>Choose file...</span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      accept=".txt,.md,.json,.yaml,.yml"
+                    />
+                  </label>
+                )}
               </div>
             </div>
           )}
@@ -3215,7 +4013,7 @@ export default function Home() {
               <strong className="text-zinc-900 dark:text-zinc-100">
                 {m.role === 'user' ? 'You' : currentProvider?.name || 'AI'}
               </strong>
-              {/* Show usage for non-streaming messages */}
+              {/* Show usage for both streaming and non-streaming messages */}
               {'usage' in m && m.usage && (
                 <span className="text-xs text-zinc-500 dark:text-zinc-500">
                   {m.usage.promptTokens} prompt + {m.usage.completionTokens}{' '}
@@ -3346,8 +4144,139 @@ export const codeTools = {
   }),
 };
 
+// Helper function to extract PR info from URL or messages
+function extractPRInfo(
+  prUrl?: string,
+  messages?: UIMessage[] | Array<{ role: string; content: string }>,
+): { owner: string; repo: string; prNumber: string } | null {
+  // First try explicit prUrl parameter
+  if (prUrl) {
+    const match = prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i);
+    if (match) {
+      return { owner: match[1], repo: match[2], prNumber: match[3] };
+    }
+  }
+
+  // Otherwise, try to extract from messages
+  if (messages) {
+    for (const message of messages) {
+      let content = '';
+      
+      // Handle UIMessage type (has parts array)
+      if ('parts' in message && Array.isArray(message.parts)) {
+        content = message.parts
+          .map((p: any) => (p.type === 'text' ? p.text : ''))
+          .join('');
+      }
+      // Handle simple { role, content } type
+      else if ('content' in message && typeof message.content === 'string') {
+        content = message.content;
+      }
+      // Handle array content type
+      else if ('content' in message && Array.isArray(message.content)) {
+        content = (message.content as any[])
+          .map((p: any) => (p.type === 'text' ? p.text : ''))
+          .join('');
+      }
+
+      const match = content.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i);
+      if (match) {
+        return { owner: match[1], repo: match[2], prNumber: match[3] };
+      }
+    }
+  }
+
+  return null;
+}
+
+// Helper function to post comment to GitHub PR
+async function postPRComment(
+  githubToken: string,
+  owner: string,
+  repo: string,
+  prNumber: string,
+  reviewText: string,
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number },
+): Promise<void> {
+  let commentBody = `## 🤖 AI Code Review\n\n${reviewText}`;
+
+  if (usage && usage.totalTokens > 0) {
+    commentBody += `\n\n---\n**Usage:** ${usage.promptTokens} prompt + ${usage.completionTokens} completion = ${usage.totalTokens} tokens`;
+  }
+
+  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
+  
+  console.log('[CodeReview] Posting PR comment:', {
+    owner,
+    repo,
+    prNumber,
+    commentLength: commentBody.length,
+    tokenPrefix: githubToken.substring(0, 10) + '...',
+  });
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `token ${githubToken}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'AI-Code-Reviewer',
+      },
+      body: JSON.stringify({ body: commentBody }),
+    });
+
+    console.log('[CodeReview] GitHub API response:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries()),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[CodeReview] GitHub API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText,
+        url: apiUrl,
+      });
+      throw new Error(
+        `Failed to post PR comment: ${response.status} ${response.statusText}. ${errorText}`,
+      );
+    }
+
+    const responseData = await response.json().catch(() => null);
+    console.log('[CodeReview] Successfully posted PR comment:', {
+      commentId: responseData?.id,
+      commentUrl: responseData?.html_url,
+    });
+  } catch (error) {
+    console.error('[CodeReview] Error posting PR comment:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      owner,
+      repo,
+      prNumber,
+      apiUrl,
+    });
+    throw error;
+  }
+}
+
 export async function POST(req: Request) {
   try {
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch (jsonError) {
+      console.error('[CodeReview] Failed to parse request JSON:', jsonError);
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 },
+      );
+    }
+
     const {
       messages: rawMessages,
       provider: providerId = 'openai',
@@ -3355,6 +4284,13 @@ export async function POST(req: Request) {
       model: requestedModel,
       stream = true, // Default to streaming
       systemPrompt, // Custom system prompt
+      contextFile, // Optional context file with name, content, and hash
+      fallbackModels, // Optional fallback models for Vercel AI Gateway
+      githubToken, // Optional GitHub token for posting PR comments
+      prUrl, // Optional explicit PR URL (otherwise extracted from messages)
+      // Note: The hash field enables future caching. If the context file hash hasn't changed,
+      // you could cache embeddings or processed context to avoid reprocessing the same content.
+      // Cache key could be: `context-${contextFile.hash}` or similar.
     }: {
       messages: UIMessage[] | Array<{ role: string; content: string }>;
       provider?: ProviderId;
@@ -3362,7 +4298,168 @@ export async function POST(req: Request) {
       model?: string;
       stream?: boolean;
       systemPrompt?: string;
-    } = await req.json();
+      contextFile?: {
+        name: string;
+        content: string;
+        hash: string; // SHA-256 hash of file content for cache invalidation
+      };
+      fallbackModels?: string[]; // Array of fallback model IDs for Vercel AI Gateway
+      githubToken?: string; // GitHub token for posting PR comments
+      prUrl?: string; // Explicit PR URL (optional, will be extracted from messages if not provided)
+    } = requestBody;
+
+    // Build enhanced system prompt with context file if provided
+    let enhancedSystemPrompt =
+      systemPrompt ||
+      `You are a code reviewer.
+You will be given a file path and you will review the code in that file.`;
+
+    if (contextFile) {
+      enhancedSystemPrompt += `\n\n## Repository Context\n\nThe following context file (${contextFile.name}) provides additional information about this repository:\n\n${contextFile.content}\n\nUse this context to better understand the codebase when reviewing files.`;
+    }
+
+    // Get GitHub token from request or environment
+    const resolvedGithubToken =
+      githubToken || process.env.GITHUB_TOKEN || undefined;
+
+    // Extract PR info if githubToken is provided
+    const prInfo = resolvedGithubToken
+      ? extractPRInfo(prUrl, rawMessages)
+      : null;
+
+    // If githubToken is provided but no PR info found, warn but continue
+    if (resolvedGithubToken && !prInfo) {
+      console.warn(
+        '[CodeReview] GitHub token provided but no PR URL found in request. Comment will not be posted.',
+      );
+    }
+
+    // For non-streaming with githubToken, we need to intercept the response to post comment
+    if (!stream && resolvedGithubToken && prInfo) {
+      try {
+        // Call handleAIRequest and get the response
+        const response = await handleAIRequest({
+          messages: rawMessages,
+          provider: providerId,
+          apiKey,
+          model: requestedModel,
+          stream: false,
+          systemPrompt: enhancedSystemPrompt,
+          tools: codeTools,
+          stopWhen: stepCountIs(20),
+          enableUsageMetadata: true,
+          enableStepLogging: true,
+          logPrefix: 'CodeReview',
+          contextFileHash: contextFile?.hash,
+          fallbackModels,
+        });
+
+        // Check if response is an error response
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('[CodeReview] handleAIRequest returned error:', errorData);
+          return NextResponse.json(
+            { error: errorData.error || 'AI request failed' },
+            { status: response.status },
+          );
+        }
+
+        // Extract text and usage from response
+        let responseData;
+        try {
+          responseData = await response.json();
+        } catch (jsonError) {
+          console.error('[CodeReview] Failed to parse response JSON:', jsonError);
+          const responseText = await response.text().catch(() => 'Unable to read response');
+          console.error('[CodeReview] Response text:', responseText.substring(0, 500));
+          return NextResponse.json(
+            { error: 'Failed to parse API response', details: responseText.substring(0, 200) },
+            { status: 500 },
+          );
+        }
+        
+        // Check if response has error field
+        if (responseData.error) {
+          console.error('[CodeReview] Response contains error:', responseData.error);
+          return NextResponse.json(
+            { error: responseData.error },
+            { status: 500 },
+          );
+        }
+
+        const reviewText = responseData.text || '';
+        const usage = responseData.usage;
+
+        if (!reviewText) {
+          console.error('[CodeReview] No review text in response:', JSON.stringify(responseData, null, 2));
+          return NextResponse.json(
+            { error: 'No review text generated', responseKeys: Object.keys(responseData) },
+            { status: 500 },
+          );
+        }
+
+        // Post comment to GitHub PR
+        if (reviewText && prInfo && resolvedGithubToken) {
+          console.log('[CodeReview] Attempting to post PR comment:', {
+            hasReviewText: !!reviewText,
+            reviewTextLength: reviewText.length,
+            prInfo,
+            hasToken: !!resolvedGithubToken,
+            tokenLength: resolvedGithubToken.length,
+            tokenPrefix: resolvedGithubToken.substring(0, 10) + '...',
+          });
+          
+          try {
+            await postPRComment(
+              resolvedGithubToken,
+              prInfo.owner,
+              prInfo.repo,
+              prInfo.prNumber,
+              reviewText,
+              usage,
+            );
+            console.log(
+              `[CodeReview] Successfully posted PR comment to ${prInfo.owner}/${prInfo.repo}#${prInfo.prNumber}`,
+            );
+          } catch (error) {
+            console.error('[CodeReview] Failed to post PR comment:', {
+              error: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+              prInfo,
+              reviewTextLength: reviewText.length,
+              usage,
+              tokenPrefix: resolvedGithubToken.substring(0, 10) + '...',
+            });
+            // Don't fail the request if comment posting fails, but log the error
+          }
+        } else {
+          console.warn('[CodeReview] Skipping PR comment post:', {
+            hasReviewText: !!reviewText,
+            hasPrInfo: !!prInfo,
+            hasToken: !!resolvedGithubToken,
+            prInfo,
+          });
+        }
+
+        return NextResponse.json(responseData);
+      } catch (error) {
+        console.error('[CodeReview] Error in non-streaming with githubToken:', error);
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error occurred';
+        return NextResponse.json(
+          { error: errorMessage, details: error instanceof Error ? error.stack : undefined },
+          { status: 500 },
+        );
+      }
+    }
+
+    // For streaming, we can't easily intercept and post comment, so we'll skip it
+    // Users can use non-streaming mode when they want automatic PR comments
+    if (stream && resolvedGithubToken && prInfo) {
+      console.warn(
+        '[CodeReview] GitHub token provided but streaming is enabled. PR comments are only posted for non-streaming requests. Set stream=false to enable automatic PR comments.',
+      );
+    }
 
     // Use handleAIRequest from the shared library, with codereview-specific options
     return handleAIRequest({
@@ -3371,10 +4468,7 @@ export async function POST(req: Request) {
       apiKey,
       model: requestedModel,
       stream,
-      systemPrompt:
-        systemPrompt ||
-        `You are a code reviewer.
-You will be given a file path and you will review the code in that file.`,
+      systemPrompt: enhancedSystemPrompt,
       tools: codeTools, // Always enable tools for code review
       // Allow up to 20 steps to handle complex reviews with multiple tool calls
       // This covers: reading PR, reading multiple files, and generating the review
@@ -3382,12 +4476,32 @@ You will be given a file path and you will review the code in that file.`,
       enableUsageMetadata: true, // Include usage in streaming response for UI display
       enableStepLogging: true, // Log tool calls for debugging
       logPrefix: 'CodeReview',
+      contextFileHash: contextFile?.hash, // Pass hash for provider-level caching
+      fallbackModels, // Pass fallback models for Vercel AI Gateway
+      // Note: When contextFile.hash is unchanged and user query is identical,
+      // OpenAI will automatically return cached responses (faster + cheaper).
+      // The hash helps track when context changes and cache should be invalidated.
     });
   } catch (error) {
     console.error('Code review error:', error);
     const message =
       error instanceof Error ? error.message : 'An unexpected error occurred';
-    return NextResponse.json({ error: message }, { status: 500 });
+    const stack = error instanceof Error ? error.stack : undefined;
+    
+    // Log full error details for debugging
+    console.error('Error details:', {
+      message,
+      stack,
+      error: error instanceof Error ? error.toString() : String(error),
+    });
+    
+    return NextResponse.json(
+      {
+        error: message,
+        ...(process.env.NODE_ENV === 'development' && { stack }),
+      },
+      { status: 500 },
+    );
   }
 }
 </file>

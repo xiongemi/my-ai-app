@@ -117,7 +117,7 @@ function extractPRInfo(
   if (messages) {
     for (const message of messages) {
       let content = '';
-      
+
       // Handle UIMessage type (has parts array)
       if ('parts' in message && Array.isArray(message.parts)) {
         content = message.parts
@@ -135,7 +135,9 @@ function extractPRInfo(
           .join('');
       }
 
-      const match = content.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i);
+      const match = content.match(
+        /github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i,
+      );
       if (match) {
         return { owner: match[1], repo: match[2], prNumber: match[3] };
       }
@@ -152,7 +154,11 @@ async function postPRComment(
   repo: string,
   prNumber: string,
   reviewText: string,
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number },
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  },
 ): Promise<void> {
   let commentBody = `## 🤖 AI Code Review\n\n${reviewText}`;
 
@@ -161,7 +167,7 @@ async function postPRComment(
   }
 
   const apiUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
-  
+
   console.log('[CodeReview] Posting PR comment:', {
     owner,
     repo,
@@ -312,8 +318,13 @@ You will be given a file path and you will review the code in that file.`;
 
         // Check if response is an error response
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-          console.error('[CodeReview] handleAIRequest returned error:', errorData);
+          const errorData = await response
+            .json()
+            .catch(() => ({ error: 'Unknown error' }));
+          console.error(
+            '[CodeReview] handleAIRequest returned error:',
+            errorData,
+          );
           return NextResponse.json(
             { error: errorData.error || 'AI request failed' },
             { status: response.status },
@@ -325,18 +336,32 @@ You will be given a file path and you will review the code in that file.`;
         try {
           responseData = await response.json();
         } catch (jsonError) {
-          console.error('[CodeReview] Failed to parse response JSON:', jsonError);
-          const responseText = await response.text().catch(() => 'Unable to read response');
-          console.error('[CodeReview] Response text:', responseText.substring(0, 500));
+          console.error(
+            '[CodeReview] Failed to parse response JSON:',
+            jsonError,
+          );
+          const responseText = await response
+            .text()
+            .catch(() => 'Unable to read response');
+          console.error(
+            '[CodeReview] Response text:',
+            responseText.substring(0, 500),
+          );
           return NextResponse.json(
-            { error: 'Failed to parse API response', details: responseText.substring(0, 200) },
+            {
+              error: 'Failed to parse API response',
+              details: responseText.substring(0, 200),
+            },
             { status: 500 },
           );
         }
-        
+
         // Check if response has error field
         if (responseData.error) {
-          console.error('[CodeReview] Response contains error:', responseData.error);
+          console.error(
+            '[CodeReview] Response contains error:',
+            responseData.error,
+          );
           return NextResponse.json(
             { error: responseData.error },
             { status: 500 },
@@ -347,9 +372,15 @@ You will be given a file path and you will review the code in that file.`;
         const usage = responseData.usage;
 
         if (!reviewText) {
-          console.error('[CodeReview] No review text in response:', JSON.stringify(responseData, null, 2));
+          console.error(
+            '[CodeReview] No review text in response:',
+            JSON.stringify(responseData, null, 2),
+          );
           return NextResponse.json(
-            { error: 'No review text generated', responseKeys: Object.keys(responseData) },
+            {
+              error: 'No review text generated',
+              responseKeys: Object.keys(responseData),
+            },
             { status: 500 },
           );
         }
@@ -364,7 +395,7 @@ You will be given a file path and you will review the code in that file.`;
             tokenLength: resolvedGithubToken.length,
             tokenPrefix: resolvedGithubToken.substring(0, 10) + '...',
           });
-          
+
           try {
             await postPRComment(
               resolvedGithubToken,
@@ -399,22 +430,265 @@ You will be given a file path and you will review the code in that file.`;
 
         return NextResponse.json(responseData);
       } catch (error) {
-        console.error('[CodeReview] Error in non-streaming with githubToken:', error);
+        console.error(
+          '[CodeReview] Error in non-streaming with githubToken:',
+          error,
+        );
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error occurred';
         return NextResponse.json(
-          { error: errorMessage, details: error instanceof Error ? error.stack : undefined },
+          {
+            error: errorMessage,
+            details: error instanceof Error ? error.stack : undefined,
+          },
           { status: 500 },
         );
       }
     }
 
-    // For streaming, we can't easily intercept and post comment, so we'll skip it
-    // Users can use non-streaming mode when they want automatic PR comments
+    // For streaming with githubToken, intercept the stream to collect text and post comment
     if (stream && resolvedGithubToken && prInfo) {
-      console.warn(
-        '[CodeReview] GitHub token provided but streaming is enabled. PR comments are only posted for non-streaming requests. Set stream=false to enable automatic PR comments.',
-      );
+      try {
+        const response = await handleAIRequest({
+          messages: rawMessages,
+          provider: providerId,
+          apiKey,
+          model: requestedModel,
+          stream: true,
+          systemPrompt: enhancedSystemPrompt,
+          tools: codeTools,
+          stopWhen: stepCountIs(20),
+          enableUsageMetadata: true,
+          enableStepLogging: true,
+          logPrefix: 'CodeReview',
+          contextFileHash: contextFile?.hash,
+          fallbackModels,
+        });
+
+        // If response is an error, return it directly
+        if (!response.ok) {
+          return response;
+        }
+
+        // Intercept the streaming response to collect text and usage
+        const originalStream = response.body;
+        if (!originalStream) {
+          console.error('[CodeReview] No stream body in response');
+          return response;
+        }
+
+        // Collect text chunks and usage from the stream
+        let collectedText = '';
+        let collectedUsage: {
+          promptTokens: number;
+          completionTokens: number;
+          totalTokens: number;
+        } | null = null;
+        const reader = originalStream.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        // Create a new readable stream that forwards chunks and collects text
+        const transformedStream = new ReadableStream({
+          async start(controller) {
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                // Forward the chunk immediately
+                controller.enqueue(value);
+
+                // Decode and accumulate chunks for parsing
+                buffer += decoder.decode(value, { stream: true });
+
+                // Process complete lines from the buffer
+                const lines = buffer.split('\n');
+                // Keep the last incomplete line in the buffer
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                  if (!line.trim()) continue;
+
+                  // AI SDK stream format: lines start with "0:", "1:", etc. followed by JSON
+                  const match = line.match(/^\d+:(.*)$/);
+                  if (match) {
+                    try {
+                      const jsonStr = match[1];
+                      const data = JSON.parse(jsonStr);
+
+                      // Extract text deltas
+                      if (data.type === 'text-delta' && data.textDelta) {
+                        collectedText += data.textDelta;
+                      }
+
+                      // Extract full text from text chunks
+                      if (data.type === 'text' && data.text) {
+                        collectedText = data.text; // Replace with full text if available
+                      }
+
+                      // Extract usage from finish event or metadata
+                      if (data.type === 'finish') {
+                        if (data.usage) {
+                          collectedUsage = {
+                            promptTokens:
+                              data.usage.promptTokens ??
+                              data.usage.inputTokens ??
+                              0,
+                            completionTokens:
+                              data.usage.completionTokens ??
+                              data.usage.outputTokens ??
+                              0,
+                            totalTokens:
+                              data.usage.totalTokens ??
+                              (data.usage.promptTokens ??
+                                data.usage.inputTokens ??
+                                0) +
+                                (data.usage.completionTokens ??
+                                  data.usage.outputTokens ??
+                                  0),
+                          };
+                        }
+                      }
+
+                      // Also check for usage in message metadata
+                      if (data.metadata?.usage) {
+                        collectedUsage = {
+                          promptTokens: data.metadata.usage.promptTokens ?? 0,
+                          completionTokens:
+                            data.metadata.usage.completionTokens ?? 0,
+                          totalTokens:
+                            data.metadata.usage.totalTokens ??
+                            (data.metadata.usage.promptTokens ?? 0) +
+                              (data.metadata.usage.completionTokens ?? 0),
+                        };
+                      }
+                    } catch (parseError) {
+                      // Ignore parse errors for malformed JSON
+                      console.debug(
+                        '[CodeReview] Failed to parse stream line:',
+                        line.substring(0, 100),
+                      );
+                    }
+                  }
+                }
+              }
+
+              // Process any remaining buffer
+              if (buffer.trim()) {
+                const match = buffer.match(/^\d+:(.*)$/);
+                if (match) {
+                  try {
+                    const data = JSON.parse(match[1]);
+                    if (data.type === 'text-delta' && data.textDelta) {
+                      collectedText += data.textDelta;
+                    }
+                    if (data.type === 'finish' && data.usage) {
+                      collectedUsage = {
+                        promptTokens:
+                          data.usage.promptTokens ??
+                          data.usage.inputTokens ??
+                          0,
+                        completionTokens:
+                          data.usage.completionTokens ??
+                          data.usage.outputTokens ??
+                          0,
+                        totalTokens:
+                          data.usage.totalTokens ??
+                          (data.usage.promptTokens ??
+                            data.usage.inputTokens ??
+                            0) +
+                            (data.usage.completionTokens ??
+                              data.usage.outputTokens ??
+                              0),
+                      };
+                    }
+                  } catch (e) {
+                    // Ignore parse errors
+                  }
+                }
+              }
+
+              // Stream finished, post comment to GitHub
+              if (collectedText && prInfo && resolvedGithubToken) {
+                console.log(
+                  '[CodeReview] Stream completed, posting PR comment:',
+                  {
+                    textLength: collectedText.length,
+                    textPreview: collectedText.substring(0, 200),
+                    usage: collectedUsage,
+                    prInfo,
+                  },
+                );
+
+                // Post comment asynchronously (don't block the response)
+                postPRComment(
+                  resolvedGithubToken,
+                  prInfo.owner,
+                  prInfo.repo,
+                  prInfo.prNumber,
+                  collectedText,
+                  collectedUsage || undefined,
+                ).catch((error) => {
+                  console.error(
+                    '[CodeReview] Failed to post PR comment after streaming:',
+                    {
+                      error:
+                        error instanceof Error ? error.message : String(error),
+                      stack: error instanceof Error ? error.stack : undefined,
+                      prInfo,
+                      textLength: collectedText.length,
+                    },
+                  );
+                });
+              } else {
+                console.warn(
+                  '[CodeReview] Stream completed but not posting comment:',
+                  {
+                    hasText: !!collectedText,
+                    textLength: collectedText.length,
+                    hasPrInfo: !!prInfo,
+                    hasToken: !!resolvedGithubToken,
+                  },
+                );
+              }
+
+              controller.close();
+            } catch (error) {
+              console.error('[CodeReview] Error processing stream:', error);
+              controller.error(error);
+            }
+          },
+        });
+
+        // Return a new response with the transformed stream
+        return new Response(transformedStream, {
+          headers: response.headers,
+          status: response.status,
+          statusText: response.statusText,
+        });
+      } catch (error) {
+        console.error(
+          '[CodeReview] Error in streaming with githubToken:',
+          error,
+        );
+        // If there's an error, fall back to normal streaming without comment posting
+        return handleAIRequest({
+          messages: rawMessages,
+          provider: providerId,
+          apiKey,
+          model: requestedModel,
+          stream: true,
+          systemPrompt: enhancedSystemPrompt,
+          tools: codeTools,
+          stopWhen: stepCountIs(20),
+          enableUsageMetadata: true,
+          enableStepLogging: true,
+          logPrefix: 'CodeReview',
+          contextFileHash: contextFile?.hash,
+          fallbackModels,
+        });
+      }
     }
 
     // Use handleAIRequest from the shared library, with codereview-specific options
@@ -443,14 +717,14 @@ You will be given a file path and you will review the code in that file.`;
     const message =
       error instanceof Error ? error.message : 'An unexpected error occurred';
     const stack = error instanceof Error ? error.stack : undefined;
-    
+
     // Log full error details for debugging
     console.error('Error details:', {
       message,
       stack,
       error: error instanceof Error ? error.toString() : String(error),
     });
-    
+
     return NextResponse.json(
       {
         error: message,

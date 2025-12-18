@@ -66,20 +66,20 @@ export async function handleAIRequest(options: AIHandlerOptions) {
   // For non-streaming: rawMessages is Array<{ role: string; content: string }> format
   // Normalize to UIMessage[] format first, then convert to ModelMessage[]
   let normalizedMessages: UIMessage[];
-  
+
   if (stream) {
     // Streaming mode already sends UIMessage[] format
     normalizedMessages = rawMessages as UIMessage[];
   } else {
     // Non-streaming mode sends simple format, convert to UIMessage[] format
     // UIMessage can have either 'content' (string) or 'parts' (array)
-    normalizedMessages = (rawMessages as Array<{ role: string; content: string }>).map(
-      (m) => ({
-        id: `msg-${Date.now()}-${Math.random()}`,
-        role: m.role as 'user' | 'assistant' | 'system',
-        parts: [{ type: 'text' as const, text: m.content }],
-      }),
-    ) as unknown as UIMessage[];
+    normalizedMessages = (
+      rawMessages as Array<{ role: string; content: string }>
+    ).map((m) => ({
+      id: `msg-${Date.now()}-${Math.random()}`,
+      role: m.role as 'user' | 'assistant' | 'system',
+      parts: [{ type: 'text' as const, text: m.content }],
+    })) as unknown as UIMessage[];
   }
 
   let messages = convertToModelMessages(normalizedMessages);
@@ -188,7 +188,8 @@ export async function handleAIRequest(options: AIHandlerOptions) {
   if (stream) {
     // Streaming mode
     // Store usage from onFinish to use in messageMetadata
-    let streamUsage: { inputTokens: number; outputTokens: number } | null = null;
+    let streamUsage: { inputTokens: number; outputTokens: number } | null =
+      null;
 
     const result = streamText({
       model,
@@ -340,7 +341,7 @@ export async function handleAIRequest(options: AIHandlerOptions) {
 
       // Extract text from result - check both result.text and steps
       let finalText = result.text || '';
-      
+
       // If no text but we have steps, try to extract text from the last step
       if (!finalText && (result as any).steps) {
         const steps = (result as any).steps;
@@ -393,7 +394,7 @@ export async function handleAIRequest(options: AIHandlerOptions) {
       // Some providers (like Cohere) return citations with tool_output instead of document field
       // The error.value contains the raw API response with the actual text
       // Error structure: AI_APICallError -> cause: [Error[AI_TypeValidationError]] -> value: {message, usage}
-      
+
       // Log error structure for debugging
       console.log(`[${logPrefix}] Caught error:`, {
         errorName: error?.name,
@@ -411,7 +412,9 @@ export async function handleAIRequest(options: AIHandlerOptions) {
       if (!responseData?.message?.content && error?.responseBody) {
         try {
           responseData = JSON.parse(error.responseBody);
-          console.log(`[${logPrefix}] Parsed responseBody to get response data`);
+          console.log(
+            `[${logPrefix}] Parsed responseBody to get response data`,
+          );
         } catch (e) {
           console.warn(`[${logPrefix}] Failed to parse responseBody:`, e);
         }
