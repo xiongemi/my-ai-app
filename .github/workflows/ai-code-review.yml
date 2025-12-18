@@ -84,14 +84,6 @@ jobs:
             BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --argjson fallbacks "$FALLBACK_ARRAY" '. + {"fallbackModels": $fallbacks}')
           fi
 
-          # Add GitHub token and PR URL for automatic comment posting
-          # GITHUB_TOKEN is automatically provided by GitHub Actions
-          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
-          if [ -n "$GITHUB_TOKEN" ]; then
-            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg token "$GITHUB_TOKEN" '. + {"githubToken": $token}')
-            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg url "$PR_URL" '. + {"prUrl": $url}')
-          fi
-
           REQUEST_PAYLOAD="$BASE_PAYLOAD"
 
           # Call the AI code review API (non-streaming)
@@ -172,9 +164,10 @@ jobs:
             exit 1
           fi
 
-          # Extract the review text from the response
+          # Extract the review text and usage from the response
           # The API returns { text: "...", usage: {...} } for non-streaming
           REVIEW_TEXT=$(echo "$REVIEW_RESPONSE" | jq -r '.text // empty')
+          USAGE=$(echo "$REVIEW_RESPONSE" | jq '.usage // empty')
 
           if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" = "null" ]; then
             echo "Error: No review content received"
@@ -183,10 +176,43 @@ jobs:
             exit 1
           fi
 
-          # If githubToken was provided, the API automatically posted the comment
-          # Otherwise, we would need to post it manually here (but that's not needed anymore)
+          # Post comment to GitHub PR using GitHub API
+          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
           if [ -n "$GITHUB_TOKEN" ]; then
-            echo "Review completed! Comment should be automatically posted to PR #$PR_NUMBER"
+            echo "Posting review comment to PR #$PR_NUMBER..."
+            
+            # Build comment body
+            COMMENT_BODY="## 🤖 AI Code Review\n\n$REVIEW_TEXT"
+            
+            # Add usage information if available
+            if [ "$USAGE" != "null" ] && [ -n "$USAGE" ]; then
+              PROMPT_TOKENS=$(echo "$USAGE" | jq -r '.promptTokens // .prompt_tokens // 0')
+              COMPLETION_TOKENS=$(echo "$USAGE" | jq -r '.completionTokens // .completion_tokens // 0')
+              TOTAL_TOKENS=$(echo "$USAGE" | jq -r '.totalTokens // .total_tokens // 0')
+              
+              if [ "$TOTAL_TOKENS" != "0" ] && [ "$TOTAL_TOKENS" != "null" ]; then
+                COMMENT_BODY="$COMMENT_BODY\n\n---\n**Usage:** $PROMPT_TOKENS prompt + $COMPLETION_TOKENS completion = $TOTAL_TOKENS tokens"
+              fi
+            fi
+            
+            # Post comment to PR
+            COMMENT_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+              "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "Content-Type: application/json" \
+              -d "{\"body\": $(echo "$COMMENT_BODY" | jq -Rs .)}")
+            
+            COMMENT_HTTP_CODE=$(echo "$COMMENT_RESPONSE" | tail -n1)
+            COMMENT_BODY_RESPONSE=$(echo "$COMMENT_RESPONSE" | sed '$d')
+            
+            if [ "$COMMENT_HTTP_CODE" -ge 200 ] && [ "$COMMENT_HTTP_CODE" -lt 300 ]; then
+              echo "✅ Successfully posted review comment to PR #$PR_NUMBER"
+            else
+              echo "::warning::Failed to post PR comment (HTTP $COMMENT_HTTP_CODE)"
+              echo "Comment response: $COMMENT_BODY_RESPONSE"
+              echo "Review was still generated successfully, but comment was not posted."
+            fi
           else
-            echo "Review completed! (No GitHub token provided, comment not posted)"
+            echo "Review completed! (No GitHub token available, comment not posted)"
           fi
