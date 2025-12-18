@@ -2,7 +2,7 @@ name: AI Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, reopened, review_requested, ready_for_review, synchronize]
 
 jobs:
   review:
@@ -37,11 +37,18 @@ jobs:
           # GITHUB_TOKEN is automatically provided by GitHub Actions - no need to set it as a secret
           # It's available as ${{ secrets.GITHUB_TOKEN }} or via the GITHUB_TOKEN environment variable
         run: |
-          # Get PR information
+          # Get PR information (define early for use throughout workflow)
           PR_URL="${{ github.event.pull_request.html_url }}"
           PR_NUMBER="${{ github.event.pull_request.number }}"
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
+          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          
+          # Validate required variables
+          if [ -z "$PR_NUMBER" ] || [ -z "$REPO_OWNER" ] || [ -z "$REPO_NAME" ]; then
+            echo "::error::Missing required PR information: PR_NUMBER=$PR_NUMBER, REPO_OWNER=$REPO_OWNER, REPO_NAME=$REPO_NAME"
+            exit 1
+          fi
 
           # Set defaults if not provided
           AI_PROVIDER="${AI_PROVIDER:-openai}"
@@ -177,12 +184,11 @@ jobs:
           fi
 
           # Post comment to GitHub PR using GitHub API
-          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
           if [ -n "$GITHUB_TOKEN" ]; then
             echo "Posting review comment to PR #$PR_NUMBER..."
             
-            # Build comment body
-            COMMENT_BODY="## 🤖 AI Code Review\n\n$REVIEW_TEXT"
+            # Build comment body with unique marker for potential future deduplication
+            COMMENT_BODY="## 🤖 AI Code Review\n\n<!-- ai-code-review-bot -->\n\n$REVIEW_TEXT"
             
             # Add usage information if available
             if [ "$USAGE" != "null" ] && [ -n "$USAGE" ]; then
@@ -195,24 +201,77 @@ jobs:
               fi
             fi
             
-            # Post comment to PR
-            COMMENT_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-              "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" \
-              -H "Authorization: token $GITHUB_TOKEN" \
+            # Check for existing bot comment and update if found, otherwise create new
+            EXISTING_COMMENT_ID=$(curl -s \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
               -H "Accept: application/vnd.github.v3+json" \
-              -H "Content-Type: application/json" \
-              -d "{\"body\": $(echo "$COMMENT_BODY" | jq -Rs .)}")
+              -H "User-Agent: my-ai-app/ai-code-review" \
+              "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" \
+              | jq -r '.[] | select(.body | contains("<!-- ai-code-review-bot -->")) | .id' | head -n1)
             
-            COMMENT_HTTP_CODE=$(echo "$COMMENT_RESPONSE" | tail -n1)
+            COMMENT_JSON_BODY=$(echo "$COMMENT_BODY" | jq -Rs .)
+            
+            if [ -n "$EXISTING_COMMENT_ID" ] && [ "$EXISTING_COMMENT_ID" != "null" ]; then
+              echo "Updating existing comment (ID: $EXISTING_COMMENT_ID)..."
+              COMMENT_RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
+                "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/comments/$EXISTING_COMMENT_ID" \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                -H "Content-Type: application/json" \
+                -H "User-Agent: my-ai-app/ai-code-review" \
+                -d "{\"body\": $COMMENT_JSON_BODY}")
+            else
+              echo "Creating new comment..."
+              COMMENT_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+                "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                -H "Content-Type: application/json" \
+                -H "User-Agent: my-ai-app/ai-code-review" \
+                -d "{\"body\": $COMMENT_JSON_BODY}")
+            fi
+            
+            COMMENT_HTTP_CODE=$(echo "$COMMENT_RESPONSE" | tail -n1 | tr -d '[:space:]')
             COMMENT_BODY_RESPONSE=$(echo "$COMMENT_RESPONSE" | sed '$d')
             
-            if [ "$COMMENT_HTTP_CODE" -ge 200 ] && [ "$COMMENT_HTTP_CODE" -lt 300 ]; then
-              echo "✅ Successfully posted review comment to PR #$PR_NUMBER"
-            else
-              echo "::warning::Failed to post PR comment (HTTP $COMMENT_HTTP_CODE)"
-              echo "Comment response: $COMMENT_BODY_RESPONSE"
-              echo "Review was still generated successfully, but comment was not posted."
-            fi
+            # Handle specific HTTP status codes
+            case "$COMMENT_HTTP_CODE" in
+              200|201)
+                echo "✅ Successfully posted review comment to PR #$PR_NUMBER"
+                ;;
+              403)
+                echo "::error::Failed to post PR comment: Forbidden (HTTP 403)"
+                echo "This usually indicates:"
+                echo "  - Rate limit exceeded (check GitHub API rate limits)"
+                echo "  - Insufficient permissions for GITHUB_TOKEN"
+                echo "  - Token has expired or been revoked"
+                echo "Comment response: $COMMENT_BODY_RESPONSE"
+                ;;
+              404)
+                echo "::error::Failed to post PR comment: Not Found (HTTP 404)"
+                echo "This usually indicates:"
+                echo "  - PR #$PR_NUMBER not found in $REPO_OWNER/$REPO_NAME"
+                echo "  - Repository or issue doesn't exist"
+                echo "  - GITHUB_TOKEN doesn't have access to this repository"
+                echo "Comment response: $COMMENT_BODY_RESPONSE"
+                ;;
+              422)
+                echo "::error::Failed to post PR comment: Validation Error (HTTP 422)"
+                echo "This usually indicates:"
+                echo "  - Comment body is too long or contains invalid characters"
+                echo "  - PR is locked or in a state that doesn't allow comments"
+                echo "Comment response: $COMMENT_BODY_RESPONSE"
+                ;;
+              *)
+                if [ "$COMMENT_HTTP_CODE" -ge 200 ] && [ "$COMMENT_HTTP_CODE" -lt 300 ]; then
+                  echo "✅ Successfully posted review comment to PR #$PR_NUMBER"
+                else
+                  echo "::warning::Failed to post PR comment (HTTP $COMMENT_HTTP_CODE)"
+                  echo "Comment response: $COMMENT_BODY_RESPONSE"
+                  echo "Review was still generated successfully, but comment was not posted."
+                fi
+                ;;
+            esac
           else
             echo "Review completed! (No GitHub token available, comment not posted)"
           fi
