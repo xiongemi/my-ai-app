@@ -116,7 +116,7 @@
     ]
   },
   "vercel-ai-gateway": {
-    "defaultModel": "openai/gpt-4o",
+    "defaultModel": "openai/gpt-5-mini",
     "models": [
       {
         "id": "openai/gpt-5.2",
@@ -147,16 +147,6 @@
         "id": "openai/gpt-4.1-nano",
         "name": "OpenAI GPT-4.1 Nano",
         "description": "Lightweight GPT-4.1 variant"
-      },
-      {
-        "id": "openai/gpt-4o",
-        "name": "OpenAI GPT-4o",
-        "description": "Via Vercel Gateway"
-      },
-      {
-        "id": "openai/gpt-4o-mini",
-        "name": "OpenAI GPT-4o Mini",
-        "description": "Via Vercel Gateway"
       },
       {
         "id": "google/gemini-1.5-pro",
