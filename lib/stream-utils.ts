@@ -11,24 +11,41 @@ export interface StreamParseResult {
 
 /**
  * Parses a single line from the AI SDK stream format
- * Lines are in format: "0:{"type":"text-delta","textDelta":"..."}"
+ * Supports two formats:
+ * 1. SSE format: "data: {"type":"text-delta","textDelta":"..."}\n\n"
+ * 2. Numbered format: "0:{"type":"text-delta","textDelta":"..."}"
  * @param line - The line to parse
  * @returns Parsed data or null if line doesn't match expected format
  */
 function parseStreamLine(line: string): any | null {
   if (!line.trim()) return null;
 
-  // AI SDK stream format: lines start with "0:", "1:", etc. followed by JSON
-  const match = line.match(/^\d+:(.*)$/);
-  if (!match) return null;
-
-  try {
-    const jsonStr = match[1];
-    return JSON.parse(jsonStr);
-  } catch (parseError) {
-    // Ignore parse errors for malformed JSON
-    return null;
+  // Try SSE format first: "data: {...}"
+  const sseMatch = line.match(/^data:\s*(.*)$/);
+  if (sseMatch) {
+    try {
+      const jsonStr = sseMatch[1].trim();
+      if (!jsonStr) return null; // Empty data line
+      return JSON.parse(jsonStr);
+    } catch (parseError) {
+      // Ignore parse errors for malformed JSON
+      return null;
+    }
   }
+
+  // Try numbered format: "0: {...}"
+  const numberedMatch = line.match(/^\d+:(.*)$/);
+  if (numberedMatch) {
+    try {
+      const jsonStr = numberedMatch[1];
+      return JSON.parse(jsonStr);
+    } catch (parseError) {
+      // Ignore parse errors for malformed JSON
+      return null;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -46,24 +63,33 @@ function extractFromStreamData(
   let text = currentText;
   let usage = currentUsage;
 
-  // Log all stream events to understand format (use console.log so it shows up)
+  // Log ALL stream events until we find text (to debug why text isn't being extracted)
   if (data.type) {
-    console.log('[StreamUtils] Processing stream event:', {
-      type: data.type,
-      hasTextDelta: !!data.textDelta,
-      hasText: !!data.text,
-      hasContent: !!data.content,
-      textDeltaPreview: data.textDelta?.substring(0, 100),
-      textPreview: data.text?.substring(0, 100),
-      keys: Object.keys(data),
-      fullData: JSON.stringify(data).substring(0, 500), // Log full data structure
-    });
-  } else {
-    // Log if we get data without a type
-    console.log('[StreamUtils] Data without type:', {
-      keys: Object.keys(data),
-      preview: JSON.stringify(data).substring(0, 200),
-    });
+    const shouldLog = 
+      !text || // Log all events if we haven't collected text yet
+      data.type === 'text-delta' || 
+      data.type === 'text' || 
+      data.type === 'text-chunk' ||
+      data.type === 'message' ||
+      data.type === 'finish' ||
+      data.type.includes('text') ||
+      data.type.includes('content') ||
+      data.type.includes('delta');
+    
+    if (shouldLog) {
+      console.log('[StreamUtils] Processing stream event:', {
+        type: data.type,
+        hasTextDelta: !!data.textDelta,
+        hasText: !!data.text,
+        hasContent: !!data.content,
+        hasMessage: !!data.message,
+        hasDelta: !!data.delta,
+        textDeltaPreview: data.textDelta?.substring(0, 100),
+        textPreview: data.text?.substring(0, 100),
+        contentPreview: typeof data.content === 'string' ? data.content.substring(0, 100) : undefined,
+        keys: Object.keys(data),
+      });
+    }
   }
 
   // Extract text deltas
@@ -131,6 +157,37 @@ function processStreamBuffer(
   result: StreamParseResult,
 ): { buffer: string; result: StreamParseResult } {
   // Process complete lines from the buffer
+  // For SSE format, events are separated by double newlines (\n\n)
+  // Split by double newlines first, then by single newlines for numbered format
+  const sseEvents = buffer.split('\n\n');
+  
+  // If we have SSE format (multiple events separated by \n\n), process them
+  if (sseEvents.length > 1) {
+    // Keep the last incomplete event in the buffer
+    const newBuffer = sseEvents.pop() || '';
+    let text = result.text;
+    let usage = result.usage;
+
+    for (const event of sseEvents) {
+      // Each SSE event might have multiple lines (data: {...}\n)
+      const lines = event.split('\n');
+      for (const line of lines) {
+        const data = parseStreamLine(line);
+        if (data) {
+          const extracted = extractFromStreamData(data, text, usage);
+          text = extracted.text;
+          usage = extracted.usage;
+        }
+      }
+    }
+
+    return {
+      buffer: newBuffer,
+      result: { text, usage },
+    };
+  }
+
+  // Fallback to single-line processing (for numbered format)
   const lines = buffer.split('\n');
   // Keep the last incomplete line in the buffer
   const newBuffer = lines.pop() || '';
