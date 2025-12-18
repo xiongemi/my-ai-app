@@ -115,6 +115,31 @@
       { "id": "qwen-max", "name": "Qwen Max", "description": "Most capable" }
     ]
   },
+  "cohere": {
+    "defaultModel": "command-r-plus",
+    "models": [
+      {
+        "id": "command-r-plus",
+        "name": "Command R+",
+        "description": "Most capable model"
+      },
+      {
+        "id": "command-r",
+        "name": "Command R",
+        "description": "Balanced performance"
+      },
+      {
+        "id": "command",
+        "name": "Command",
+        "description": "Fast and efficient"
+      },
+      {
+        "id": "command-light",
+        "name": "Command Light",
+        "description": "Lightweight model"
+      }
+    ]
+  },
   "vercel-ai-gateway": {
     "defaultModel": "openai/gpt-5-mini",
     "models": [

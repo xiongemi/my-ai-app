@@ -18,6 +18,7 @@ export const providers = [
   { id: 'anthropic', name: 'Anthropic (Claude)' },
   { id: 'deepseek', name: 'DeepSeek' },
   { id: 'qwen', name: 'Qwen (Alibaba)' },
+  { id: 'cohere', name: 'Cohere' },
   { id: 'vercel-ai-gateway', name: 'Vercel AI Gateway' },
 ];
 

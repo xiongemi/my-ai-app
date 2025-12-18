@@ -3,6 +3,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createQwen } from 'qwen-ai-provider';
+import { createCohere } from '@ai-sdk/cohere';
 import { getDefaultModel } from '@/lib/models';
 
 // Provider configurations - exported for reuse
@@ -31,6 +32,10 @@ export const providerConfigs = {
     createProvider: (apiKey: string) => createQwen({ apiKey }),
     defaultModel: getDefaultModel('qwen'),
   },
+  cohere: {
+    createProvider: (apiKey: string) => createCohere({ apiKey }),
+    defaultModel: getDefaultModel('cohere'),
+  },
   'vercel-ai-gateway': {
     createProvider: (apiKey: string) =>
       createOpenAI({
@@ -50,6 +55,7 @@ export function getEnvApiKey(providerId: ProviderId): string | undefined {
     anthropic: 'ANTHROPIC_API_KEY',
     deepseek: 'DEEPSEEK_API_KEY',
     qwen: 'QWEN_API_KEY',
+    cohere: 'COHERE_API_KEY',
     'vercel-ai-gateway': 'VERCEL_AI_GATEWAY_API_KEY',
   };
   return process.env[envKeys[providerId]];

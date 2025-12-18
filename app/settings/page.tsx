@@ -17,6 +17,7 @@ const defaultProviders: ApiKeyConfig[] = [
   { id: 'deepseek', name: 'DeepSeek', placeholder: 'sk-...', key: '' },
   { id: 'anthropic', name: 'Anthropic', placeholder: 'sk-ant-...', key: '' },
   { id: 'qwen', name: 'Qwen (Alibaba)', placeholder: 'sk-...', key: '' },
+  { id: 'cohere', name: 'Cohere', placeholder: 'co_...', key: '' },
   {
     id: 'vercel-ai-gateway',
     name: 'Vercel AI Gateway',

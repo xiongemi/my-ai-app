@@ -13,6 +13,7 @@ describe('Providers', () => {
         'anthropic',
         'deepseek',
         'qwen',
+        'cohere',
         'vercel-ai-gateway',
       ];
 
@@ -52,6 +53,7 @@ describe('Providers', () => {
         { provider: 'anthropic', expectedEnv: 'ANTHROPIC_API_KEY' },
         { provider: 'deepseek', expectedEnv: 'DEEPSEEK_API_KEY' },
         { provider: 'qwen', expectedEnv: 'QWEN_API_KEY' },
+        { provider: 'cohere', expectedEnv: 'COHERE_API_KEY' },
         {
           provider: 'vercel-ai-gateway',
           expectedEnv: 'VERCEL_AI_GATEWAY_API_KEY',

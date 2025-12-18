@@ -23,6 +23,22 @@ export const modelCosts: Record<string, { input: number; output: number }> = {
     input: 0.0008 / 1000,
     output: 0.002 / 1000,
   },
+  'command-r-plus': {
+    input: 0.003 / 1000,
+    output: 0.015 / 1000,
+  },
+  'command-r': {
+    input: 0.0005 / 1000,
+    output: 0.0015 / 1000,
+  },
+  command: {
+    input: 0.00015 / 1000,
+    output: 0.0006 / 1000,
+  },
+  'command-light': {
+    input: 0.0001 / 1000,
+    output: 0.0003 / 1000,
+  },
 };
 
 export let userCredits = 1.0; // Initial credits in USD
