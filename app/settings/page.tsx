@@ -161,7 +161,8 @@ export default function SettingsPage() {
               GitHub Token
             </label>
             <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-2">
-              Required for GitHub Actions workflow to post PR comments. Create a
+              Optional. Not required for reading public pull requests. Only needed
+              if you want to access private repositories in the future. Create a
               personal access token with{' '}
               <code className="px-1 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded">
                 repo
