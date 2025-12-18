@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { Code, GitPullRequest, AlertCircle, X, Sparkles, FileText, Upload } from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
@@ -18,11 +18,20 @@ async function hashFileContent(content: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// Default system prompts for each mode
+const DEFAULT_SYSTEM_PROMPTS = {
+  file: 'You are a code reviewer. You will be given a file path and you will review the code in that file.',
+  pr: 'You are a code reviewer. You will be given a GitHub pull request URL and you will review all the changed files in that pull request.',
+};
+
+// Generic system prompt that works for both modes
+const GENERIC_SYSTEM_PROMPT =
+  'You are a code reviewer. You will be given either a file path or a GitHub pull request URL, and you will review the code accordingly. For file paths, review the single file. For pull requests, review all changed files in the PR.';
+
 export default function Home() {
   const [inputMode, setInputMode] = useState<InputMode>('file');
-  const [systemPrompt, setSystemPrompt] = useState(
-    'You are a code reviewer. You will be given a file path and you will review the code in that file.',
-  );
+  const [systemPrompt, setSystemPrompt] = useState(GENERIC_SYSTEM_PROMPT);
+  const [hasCustomPrompt, setHasCustomPrompt] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [fallbackModels, setFallbackModels] = useVercelGatewayFallbackModels();
   const [contextFile, setContextFile] = useState<{
@@ -31,6 +40,13 @@ export default function Home() {
     hash: string;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Update system prompt when input mode changes (only if user hasn't customized it)
+  useEffect(() => {
+    if (!hasCustomPrompt) {
+      setSystemPrompt(GENERIC_SYSTEM_PROMPT);
+    }
+  }, [inputMode, hasCustomPrompt]);
 
   // Handle file upload
   const handleFileUpload = useCallback(
@@ -106,7 +122,7 @@ export default function Home() {
           AI Code Reviewer
         </h1>
         <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-          Enter the path to a file to have it reviewed by an AI agent.
+          Enter a file path or GitHub PR URL to have it reviewed by an AI agent.
         </p>
       </div>
 
@@ -144,11 +160,24 @@ export default function Home() {
                 </label>
                 <textarea
                   value={systemPrompt}
-                  onChange={(e) => setSystemPrompt(e.target.value)}
+                  onChange={(e) => {
+                    setSystemPrompt(e.target.value);
+                    setHasCustomPrompt(true);
+                  }}
                   placeholder="Enter a custom system prompt for code review..."
                   rows={3}
                   className="w-full p-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 resize-none"
                 />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSystemPrompt(GENERIC_SYSTEM_PROMPT);
+                    setHasCustomPrompt(false);
+                  }}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 w-fit"
+                >
+                  Reset to default
+                </button>
               </div>
 
               {/* Context File Upload */}
