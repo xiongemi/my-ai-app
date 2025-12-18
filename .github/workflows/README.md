@@ -16,6 +16,7 @@ The `ai-code-review.yml` workflow automatically reviews pull requests using your
    - `AI_MODEL`: (Optional) Specific model to use. If not provided, uses the default model for the selected provider
 
    **Example Configuration:**
+
    ```
    AI_REVIEW_API_ENDPOINT: https://ai-agent-86bjedhz7-xiongemis-projects.vercel.app/api/codereview
    AI_API_KEY: sk-... (your OpenAI API key)
@@ -38,13 +39,14 @@ The `ai-code-review.yml` workflow automatically reviews pull requests using your
 ```yaml
 # In your workflow file, you can customize:
 env:
-  AI_PROVIDER: 'openai'  # or 'anthropic', 'gemini', etc.
-  AI_MODEL: 'gpt-4'      # optional, uses default if not specified
+  AI_PROVIDER: 'openai' # or 'anthropic', 'gemini', etc.
+  AI_MODEL: 'gpt-4' # optional, uses default if not specified
 ```
 
 ### Customization
 
 You can customize the workflow by:
+
 - Changing the trigger events
 - Modifying the system prompt
 - Adding additional review criteria
@@ -55,4 +57,3 @@ You can customize the workflow by:
 - **API endpoint not found**: Make sure `AI_REVIEW_API_ENDPOINT` secret is set correctly
 - **No review posted**: Check the workflow logs for API errors
 - **Authentication errors**: Verify your `AI_API_KEY` secret is correct
-

@@ -1,7 +1,15 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Code, GitPullRequest, AlertCircle, X, Sparkles, FileText, Upload } from 'lucide-react';
+import {
+  Code,
+  GitPullRequest,
+  AlertCircle,
+  X,
+  Sparkles,
+  FileText,
+  Upload,
+} from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
@@ -17,12 +25,6 @@ async function hashFileContent(content: string): Promise<string> {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
-
-// Default system prompts for each mode
-const DEFAULT_SYSTEM_PROMPTS = {
-  file: 'You are a code reviewer. You will be given a file path and you will review the code in that file.',
-  pr: 'You are a code reviewer. You will be given a GitHub pull request URL and you will review all the changed files in that pull request.',
-};
 
 // Generic system prompt that works for both modes
 const GENERIC_SYSTEM_PROMPT =
@@ -186,11 +188,16 @@ export default function Home() {
                   Repository Context File (Optional)
                 </label>
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  Upload a file containing repository context (e.g., documentation, architecture overview) to help the AI understand your codebase better.
+                  Upload a file containing repository context (e.g.,
+                  documentation, architecture overview) to help the AI
+                  understand your codebase better.
                 </p>
                 {contextFile ? (
                   <div className="flex items-center gap-2 p-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
-                    <FileText size={16} className="text-zinc-600 dark:text-zinc-400" />
+                    <FileText
+                      size={16}
+                      className="text-zinc-600 dark:text-zinc-400"
+                    />
                     <span className="flex-1 text-sm text-zinc-900 dark:text-zinc-100 truncate">
                       {contextFile.name}
                     </span>

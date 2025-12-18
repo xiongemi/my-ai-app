@@ -32,13 +32,13 @@ jobs:
           PR_NUMBER="${{ github.event.pull_request.number }}"
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
-          
+
           # Set defaults if not provided
           AI_PROVIDER="${AI_PROVIDER:-openai}"
-          
+
           echo "Reviewing PR: $PR_URL"
           echo "Using provider: $AI_PROVIDER"
-          
+
           # Prepare request payload
           if [ -n "$AI_MODEL" ]; then
             REQUEST_PAYLOAD=$(cat <<EOF
@@ -72,23 +72,23 @@ jobs:
           EOF
             )
           fi
-          
+
           # Call the AI code review API (non-streaming)
           echo "Calling API endpoint: $API_ENDPOINT"
           REVIEW_RESPONSE=$(curl -s -X POST "$API_ENDPOINT" \
             -H "Content-Type: application/json" \
             -d "$REQUEST_PAYLOAD")
-          
+
           # Extract the review text from the response
           # The API returns { text: "...", usage: {...} } for non-streaming
           REVIEW_TEXT=$(echo "$REVIEW_RESPONSE" | jq -r '.text // empty')
-          
+
           if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" = "null" ]; then
             echo "Error: No review content received"
             echo "Response: $REVIEW_RESPONSE"
             exit 1
           fi
-          
+
           # Get usage info if available
           USAGE_INFO=""
           if echo "$REVIEW_RESPONSE" | jq -e '.usage' > /dev/null 2>&1; then
@@ -99,20 +99,19 @@ jobs:
               USAGE_INFO="\n\n---\n**Usage:** $PROMPT_TOKENS prompt + $COMPLETION_TOKENS completion = $TOTAL_TOKENS tokens"
             fi
           fi
-          
+
           # Post review as PR comment
           COMMENT_BODY=$(cat <<EOF
           ## 🤖 AI Code Review
-          
+
           $REVIEW_TEXT$USAGE_INFO
           EOF
           )
-          
+
           curl -X POST \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" \
             -d "{\"body\": $(echo "$COMMENT_BODY" | jq -Rs .)}"
-          
-          echo "Review posted successfully!"
 
+          echo "Review posted successfully!"
