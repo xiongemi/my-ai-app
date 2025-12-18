@@ -38,14 +38,11 @@ export const providerConfigs = {
     defaultModel: getDefaultModel('cohere'),
   },
   'vercel-ai-gateway': {
-    // Vercel AI Gateway uses OpenAI-compatible API, so we use createOpenAI with gateway baseURL
+    // Vercel AI Gateway provider - uses @ai-sdk/gateway
     // Models must be specified in format: "provider/model" (e.g., "openai/gpt-4", "anthropic/claude-3-opus")
-    // See: https://vercel.com/docs/ai-gateway/openai-compat
-    createProvider: (apiKey: string) =>
-      createGatewayProvider({
-        apiKey,
-        baseURL: 'https://ai-gateway.vercel.sh/v1',
-      }),
+    // The gateway provider handles the endpoint URL internally - do not specify baseURL
+    // See: https://vercel.com/docs/ai-gateway
+    createProvider: (apiKey: string) => createGatewayProvider({ apiKey }),
     defaultModel: getDefaultModel('vercel-ai-gateway'),
   },
 };
