@@ -110,20 +110,41 @@ jobs:
 
           # Check HTTP status code
           if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
-            echo "Error: API returned HTTP $HTTP_CODE"
+            echo "::error::API returned HTTP $HTTP_CODE"
             echo "Full response: $REVIEW_RESPONSE"
+            
+            # Try to extract error details
+            if echo "$REVIEW_RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+              ERROR_MSG=$(echo "$REVIEW_RESPONSE" | jq -r '.error')
+              ERROR_DETAILS=$(echo "$REVIEW_RESPONSE" | jq -r '.details // empty')
+              
+              echo "::error::Error: $ERROR_MSG"
+              if [ -n "$ERROR_DETAILS" ] && [ "$ERROR_DETAILS" != "null" ]; then
+                echo "Error details: $ERROR_DETAILS"
+              fi
+              
+              # Provide helpful suggestions based on error type
+              if echo "$ERROR_MSG" | grep -qi "Method Not Allowed"; then
+                echo "::warning::This error usually indicates:"
+                echo "  1. The AI provider API key may be invalid or expired"
+                echo "  2. The model specified may not be available or supported"
+                echo "  3. For Vercel AI Gateway: Check that your API key has access to the requested models"
+                echo "  4. For Vercel AI Gateway: Verify fallback models are in correct format (e.g., 'deepseek/deepseek-coder')"
+              fi
+            fi
+            
             exit 1
           fi
 
           # Check if response is empty
           if [ -z "$REVIEW_RESPONSE" ]; then
-            echo "Error: Empty response from API"
+            echo "::error::Empty response from API"
             exit 1
           fi
 
           # Check if response is valid JSON
           if ! echo "$REVIEW_RESPONSE" | jq . > /dev/null 2>&1; then
-            echo "Error: Invalid JSON response from API"
+            echo "::error::Invalid JSON response from API"
             echo "Response: $REVIEW_RESPONSE"
             exit 1
           fi
@@ -131,7 +152,23 @@ jobs:
           # Check if the API call returned an error
           if echo "$REVIEW_RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
             ERROR_MSG=$(echo "$REVIEW_RESPONSE" | jq -r '.error')
-            echo "Error from API: $ERROR_MSG"
+            ERROR_DETAILS=$(echo "$REVIEW_RESPONSE" | jq -r '.details // empty')
+            
+            echo "::error::Error from API: $ERROR_MSG"
+            if [ -n "$ERROR_DETAILS" ] && [ "$ERROR_DETAILS" != "null" ]; then
+              echo "Error details: $ERROR_DETAILS"
+            fi
+            
+            # Provide helpful suggestions based on error type
+            if echo "$ERROR_MSG" | grep -qi "Method Not Allowed"; then
+              echo "::warning::Troubleshooting 'Method Not Allowed' error:"
+              echo "  - Verify your AI_API_KEY secret is correct and has proper permissions"
+              echo "  - Check that the model ($AI_MODEL) is available for provider ($AI_PROVIDER)"
+              echo "  - For Vercel AI Gateway: Ensure your API key has access to the gateway"
+              echo "  - For Vercel AI Gateway: Verify fallback models format is correct"
+              echo "  - Try using a different provider or model"
+            fi
+            
             exit 1
           fi
 
