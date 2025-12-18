@@ -3,7 +3,8 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { useApiKeys, useBilling, Message } from '@/components/AISettingsPanel';
+import { useApiKeys, Message } from '@/components/AISettingsPanel';
+import { useBilling } from '@/components/Billing';
 import { getDefaultModel } from '@/lib/models';
 
 interface UseAIChatOptions {

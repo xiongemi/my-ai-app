@@ -11,6 +11,7 @@ import {
   VercelGatewayFallbackModels,
   useVercelGatewayFallbackModels,
 } from './VercelGatewayFallbackModels';
+import { useBilling } from './Billing';
 
 export const providers = [
   { id: 'openai', name: 'OpenAI' },
@@ -33,19 +34,6 @@ export interface Message {
   role: 'user' | 'assistant';
   content: string;
   usage?: UsageInfo;
-}
-
-export interface BillingData {
-  totalCost: number;
-  totalTokens?: number;
-  usageHistory: Array<{
-    timestamp: string;
-    model: string;
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-    cost: number;
-  }>;
 }
 
 interface AISettingsPanelProps {
@@ -71,7 +59,8 @@ export function AISettingsPanel({
   fallbackModels,
   onFallbackModelsChange,
 }: AISettingsPanelProps) {
-  const [billingData, setBillingData] = useState<BillingData | null>(null);
+  // Use the shared useBilling hook instead of local state
+  const { billingData, refetch: refetchBilling } = useBilling();
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [internalFallbackModels, setInternalFallbackModels] =
     useVercelGatewayFallbackModels();
@@ -99,19 +88,7 @@ export function AISettingsPanel({
     }
   };
 
-  const fetchBilling = async () => {
-    try {
-      const response = await fetch('/api/billing');
-      const data = await response.json();
-      setBillingData(data);
-    } catch (e) {
-      console.error('Failed to fetch billing data', e);
-    }
-  };
-
   useEffect(() => {
-    fetchBilling();
-
     // Load API keys from localStorage
     const savedKeys = localStorage.getItem('ai-api-keys');
     if (savedKeys) {
@@ -260,25 +237,4 @@ export function useApiKeys() {
   }, []);
 
   return apiKeys;
-}
-
-// Hook to fetch billing data
-export function useBilling() {
-  const [billingData, setBillingData] = useState<BillingData | null>(null);
-
-  const fetchBilling = async () => {
-    try {
-      const response = await fetch('/api/billing');
-      const data = await response.json();
-      setBillingData(data);
-    } catch (e) {
-      console.error('Failed to fetch billing data', e);
-    }
-  };
-
-  useEffect(() => {
-    fetchBilling();
-  }, []);
-
-  return { billingData, refetch: fetchBilling };
 }
