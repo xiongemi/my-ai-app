@@ -183,6 +183,17 @@ async function postPRComment(
 
 export async function POST(req: Request) {
   try {
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch (jsonError) {
+      console.error('[CodeReview] Failed to parse request JSON:', jsonError);
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body' },
+        { status: 400 },
+      );
+    }
+
     const {
       messages: rawMessages,
       provider: providerId = 'openai',
@@ -212,7 +223,7 @@ export async function POST(req: Request) {
       fallbackModels?: string[]; // Array of fallback model IDs for Vercel AI Gateway
       githubToken?: string; // GitHub token for posting PR comments
       prUrl?: string; // Explicit PR URL (optional, will be extracted from messages if not provided)
-    } = await req.json();
+    } = requestBody;
 
     // Build enhanced system prompt with context file if provided
     let enhancedSystemPrompt =
@@ -242,49 +253,98 @@ You will be given a file path and you will review the code in that file.`;
 
     // For non-streaming with githubToken, we need to intercept the response to post comment
     if (!stream && resolvedGithubToken && prInfo) {
-      // Call handleAIRequest and get the response
-      const response = await handleAIRequest({
-        messages: rawMessages,
-        provider: providerId,
-        apiKey,
-        model: requestedModel,
-        stream: false,
-        systemPrompt: enhancedSystemPrompt,
-        tools: codeTools,
-        stopWhen: stepCountIs(20),
-        enableUsageMetadata: true,
-        enableStepLogging: true,
-        logPrefix: 'CodeReview',
-        contextFileHash: contextFile?.hash,
-        fallbackModels,
-      });
+      try {
+        // Call handleAIRequest and get the response
+        const response = await handleAIRequest({
+          messages: rawMessages,
+          provider: providerId,
+          apiKey,
+          model: requestedModel,
+          stream: false,
+          systemPrompt: enhancedSystemPrompt,
+          tools: codeTools,
+          stopWhen: stepCountIs(20),
+          enableUsageMetadata: true,
+          enableStepLogging: true,
+          logPrefix: 'CodeReview',
+          contextFileHash: contextFile?.hash,
+          fallbackModels,
+        });
 
-      // Extract text and usage from response
-      const responseData = await response.json();
-      const reviewText = responseData.text || '';
-      const usage = responseData.usage;
-
-      // Post comment to GitHub PR
-      if (reviewText && prInfo && resolvedGithubToken) {
-        try {
-          await postPRComment(
-            resolvedGithubToken,
-            prInfo.owner,
-            prInfo.repo,
-            prInfo.prNumber,
-            reviewText,
-            usage,
+        // Check if response is an error response
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+          console.error('[CodeReview] handleAIRequest returned error:', errorData);
+          return NextResponse.json(
+            { error: errorData.error || 'AI request failed' },
+            { status: response.status },
           );
-          console.log(
-            `[CodeReview] Successfully posted PR comment to ${prInfo.owner}/${prInfo.repo}#${prInfo.prNumber}`,
-          );
-        } catch (error) {
-          console.error('[CodeReview] Failed to post PR comment:', error);
-          // Don't fail the request if comment posting fails
         }
-      }
 
-      return NextResponse.json(responseData);
+        // Extract text and usage from response
+        let responseData;
+        try {
+          responseData = await response.json();
+        } catch (jsonError) {
+          console.error('[CodeReview] Failed to parse response JSON:', jsonError);
+          const responseText = await response.text().catch(() => 'Unable to read response');
+          console.error('[CodeReview] Response text:', responseText.substring(0, 500));
+          return NextResponse.json(
+            { error: 'Failed to parse API response', details: responseText.substring(0, 200) },
+            { status: 500 },
+          );
+        }
+        
+        // Check if response has error field
+        if (responseData.error) {
+          console.error('[CodeReview] Response contains error:', responseData.error);
+          return NextResponse.json(
+            { error: responseData.error },
+            { status: 500 },
+          );
+        }
+
+        const reviewText = responseData.text || '';
+        const usage = responseData.usage;
+
+        if (!reviewText) {
+          console.error('[CodeReview] No review text in response:', JSON.stringify(responseData, null, 2));
+          return NextResponse.json(
+            { error: 'No review text generated', responseKeys: Object.keys(responseData) },
+            { status: 500 },
+          );
+        }
+
+        // Post comment to GitHub PR
+        if (reviewText && prInfo && resolvedGithubToken) {
+          try {
+            await postPRComment(
+              resolvedGithubToken,
+              prInfo.owner,
+              prInfo.repo,
+              prInfo.prNumber,
+              reviewText,
+              usage,
+            );
+            console.log(
+              `[CodeReview] Successfully posted PR comment to ${prInfo.owner}/${prInfo.repo}#${prInfo.prNumber}`,
+            );
+          } catch (error) {
+            console.error('[CodeReview] Failed to post PR comment:', error);
+            // Don't fail the request if comment posting fails
+          }
+        }
+
+        return NextResponse.json(responseData);
+      } catch (error) {
+        console.error('[CodeReview] Error in non-streaming with githubToken:', error);
+        const errorMessage =
+          error instanceof Error ? error.message : 'Unknown error occurred';
+        return NextResponse.json(
+          { error: errorMessage, details: error instanceof Error ? error.stack : undefined },
+          { status: 500 },
+        );
+      }
     }
 
     // For streaming, we can't easily intercept and post comment, so we'll skip it
@@ -320,6 +380,21 @@ You will be given a file path and you will review the code in that file.`;
     console.error('Code review error:', error);
     const message =
       error instanceof Error ? error.message : 'An unexpected error occurred';
-    return NextResponse.json({ error: message }, { status: 500 });
+    const stack = error instanceof Error ? error.stack : undefined;
+    
+    // Log full error details for debugging
+    console.error('Error details:', {
+      message,
+      stack,
+      error: error instanceof Error ? error.toString() : String(error),
+    });
+    
+    return NextResponse.json(
+      {
+        error: message,
+        ...(process.env.NODE_ENV === 'development' && { stack }),
+      },
+      { status: 500 },
+    );
   }
 }

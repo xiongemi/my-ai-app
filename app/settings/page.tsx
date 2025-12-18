@@ -66,9 +66,9 @@ export default function SettingsPage() {
   };
 
   const handleSave = () => {
-    const keysToSave = providers.reduce(
+    const keysToSave: Record<string, string> = providers.reduce(
       (acc, p) => ({ ...acc, [p.id]: p.key }),
-      {},
+      {} as Record<string, string>,
     );
     // Include GitHub token in saved keys
     if (githubToken) {
