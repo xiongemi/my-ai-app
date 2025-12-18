@@ -4,7 +4,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createQwen } from 'qwen-ai-provider';
 import { createCohere } from '@ai-sdk/cohere';
-import {createGatewayProvider} from '@ai-sdk/gateway';
+import { createGatewayProvider } from '@ai-sdk/gateway';
 import { getDefaultModel } from '@/lib/models';
 
 // Provider configurations - exported for reuse

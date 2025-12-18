@@ -391,12 +391,14 @@ export async function handleAIRequest(options: AIHandlerOptions) {
       });
     } catch (error: any) {
       // Handle AI_APICallError first (e.g., "Method Not Allowed" from provider API)
-      if (error?.name === 'AI_APICallError' || error?.message?.includes('Method Not Allowed')) {
+      if (
+        error?.name === 'AI_APICallError' ||
+        error?.message?.includes('Method Not Allowed')
+      ) {
         const errorMessage = error?.message || 'Unknown API error';
-        const providerInfo = providerId === 'vercel-ai-gateway' 
-          ? 'Vercel AI Gateway' 
-          : providerId;
-        
+        const providerInfo =
+          providerId === 'vercel-ai-gateway' ? 'Vercel AI Gateway' : providerId;
+
         console.error(`[${logPrefix}] API call failed for ${providerInfo}:`, {
           errorMessage,
           model: requestedModel || modelName,
@@ -404,7 +406,7 @@ export async function handleAIRequest(options: AIHandlerOptions) {
           hasFallbackModels: !!fallbackModels && fallbackModels.length > 0,
           fallbackModels,
         });
-        
+
         // Provide helpful error message
         let helpfulMessage = `AI provider API error: ${errorMessage}`;
         if (errorMessage.includes('Method Not Allowed')) {
@@ -414,9 +416,9 @@ export async function handleAIRequest(options: AIHandlerOptions) {
 - For Vercel AI Gateway: Verify your API key has access to the gateway and the requested models
 - For Vercel AI Gateway: Check that fallback models are in correct format (e.g., "deepseek/deepseek-coder")`;
         }
-        
+
         return NextResponse.json(
-          { 
+          {
             error: helpfulMessage,
             details: errorMessage,
             provider: providerInfo,

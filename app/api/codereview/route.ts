@@ -5,6 +5,13 @@ import { readFile } from 'fs/promises';
 import { NextResponse } from 'next/server';
 import { handleAIRequest } from '@/lib/ai-handler';
 import { ProviderId } from '@/lib/providers';
+import {
+  postPRComment,
+  extractPRInfo,
+  type PRInfo,
+  type TokenUsage,
+} from '@/lib/github-pr';
+import { transformStreamToCollectData } from '@/lib/stream-utils';
 
 // Shared tools
 export const codeTools = {
@@ -99,132 +106,6 @@ export const codeTools = {
     },
   }),
 };
-
-// Helper function to extract PR info from URL or messages
-function extractPRInfo(
-  prUrl?: string,
-  messages?: UIMessage[] | Array<{ role: string; content: string }>,
-): { owner: string; repo: string; prNumber: string } | null {
-  // First try explicit prUrl parameter
-  if (prUrl) {
-    const match = prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i);
-    if (match) {
-      return { owner: match[1], repo: match[2], prNumber: match[3] };
-    }
-  }
-
-  // Otherwise, try to extract from messages
-  if (messages) {
-    for (const message of messages) {
-      let content = '';
-
-      // Handle UIMessage type (has parts array)
-      if ('parts' in message && Array.isArray(message.parts)) {
-        content = message.parts
-          .map((p: any) => (p.type === 'text' ? p.text : ''))
-          .join('');
-      }
-      // Handle simple { role, content } type
-      else if ('content' in message && typeof message.content === 'string') {
-        content = message.content;
-      }
-      // Handle array content type
-      else if ('content' in message && Array.isArray(message.content)) {
-        content = (message.content as any[])
-          .map((p: any) => (p.type === 'text' ? p.text : ''))
-          .join('');
-      }
-
-      const match = content.match(
-        /github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i,
-      );
-      if (match) {
-        return { owner: match[1], repo: match[2], prNumber: match[3] };
-      }
-    }
-  }
-
-  return null;
-}
-
-// Helper function to post comment to GitHub PR
-async function postPRComment(
-  githubToken: string,
-  owner: string,
-  repo: string,
-  prNumber: string,
-  reviewText: string,
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  },
-): Promise<void> {
-  let commentBody = `## 🤖 AI Code Review\n\n${reviewText}`;
-
-  if (usage && usage.totalTokens > 0) {
-    commentBody += `\n\n---\n**Usage:** ${usage.promptTokens} prompt + ${usage.completionTokens} completion = ${usage.totalTokens} tokens`;
-  }
-
-  const apiUrl = `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`;
-
-  console.log('[CodeReview] Posting PR comment:', {
-    owner,
-    repo,
-    prNumber,
-    commentLength: commentBody.length,
-    tokenPrefix: githubToken.substring(0, 10) + '...',
-  });
-
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `token ${githubToken}`,
-        Accept: 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json',
-        'User-Agent': 'AI-Code-Reviewer',
-      },
-      body: JSON.stringify({ body: commentBody }),
-    });
-
-    console.log('[CodeReview] GitHub API response:', {
-      status: response.status,
-      statusText: response.statusText,
-      ok: response.ok,
-      headers: Object.fromEntries(response.headers.entries()),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[CodeReview] GitHub API error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText,
-        url: apiUrl,
-      });
-      throw new Error(
-        `Failed to post PR comment: ${response.status} ${response.statusText}. ${errorText}`,
-      );
-    }
-
-    const responseData = await response.json().catch(() => null);
-    console.log('[CodeReview] Successfully posted PR comment:', {
-      commentId: responseData?.id,
-      commentUrl: responseData?.html_url,
-    });
-  } catch (error) {
-    console.error('[CodeReview] Error posting PR comment:', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      owner,
-      repo,
-      prNumber,
-      apiUrl,
-    });
-    throw error;
-  }
-}
 
 export async function POST(req: Request) {
   try {
@@ -396,29 +277,24 @@ You will be given a file path and you will review the code in that file.`;
             tokenPrefix: resolvedGithubToken.substring(0, 10) + '...',
           });
 
-          try {
-            await postPRComment(
-              resolvedGithubToken,
-              prInfo.owner,
-              prInfo.repo,
-              prInfo.prNumber,
-              reviewText,
-              usage,
-            );
-            console.log(
-              `[CodeReview] Successfully posted PR comment to ${prInfo.owner}/${prInfo.repo}#${prInfo.prNumber}`,
-            );
-          } catch (error) {
-            console.error('[CodeReview] Failed to post PR comment:', {
-              error: error instanceof Error ? error.message : String(error),
-              stack: error instanceof Error ? error.stack : undefined,
-              prInfo,
-              reviewTextLength: reviewText.length,
-              usage,
-              tokenPrefix: resolvedGithubToken.substring(0, 10) + '...',
+          // Post comment asynchronously (don't block the response)
+          postPRComment(resolvedGithubToken, prInfo, reviewText, usage)
+            .then(() => {
+              console.log(
+                `[CodeReview] Successfully posted PR comment to ${prInfo.owner}/${prInfo.repo}#${prInfo.prNumber}`,
+              );
+            })
+            .catch((error) => {
+              console.error('[CodeReview] Failed to post PR comment:', {
+                error: error instanceof Error ? error.message : String(error),
+                stack: error instanceof Error ? error.stack : undefined,
+                prInfo,
+                reviewTextLength: reviewText.length,
+                usage,
+                tokenPrefix: resolvedGithubToken.substring(0, 10) + '...',
+              });
+              // Don't fail the request if comment posting fails, but log the error
             });
-            // Don't fail the request if comment posting fails, but log the error
-          }
         } else {
           console.warn('[CodeReview] Skipping PR comment post:', {
             hasReviewText: !!reviewText,
@@ -477,159 +353,36 @@ You will be given a file path and you will review the code in that file.`;
           return response;
         }
 
-        // Collect text chunks and usage from the stream
-        let collectedText = '';
-        let collectedUsage: {
-          promptTokens: number;
-          completionTokens: number;
-          totalTokens: number;
-        } | null = null;
-        const reader = originalStream.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
+        // Transform stream to collect text and usage, then post PR comment when complete
+        const transformedStream = transformStreamToCollectData(
+          originalStream,
+          (result) => {
+            // Stream finished - post comment to GitHub only after stream completes
+            if (result.text && prInfo && resolvedGithubToken) {
+              console.log(
+                '[CodeReview] Stream completed, posting PR comment:',
+                {
+                  textLength: result.text.length,
+                  textPreview: result.text.substring(0, 200),
+                  usage: result.usage,
+                  prInfo,
+                },
+              );
 
-        // Create a new readable stream that forwards chunks and collects text
-        const transformedStream = new ReadableStream({
-          async start(controller) {
-            try {
-              while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                // Forward the chunk immediately
-                controller.enqueue(value);
-
-                // Decode and accumulate chunks for parsing
-                buffer += decoder.decode(value, { stream: true });
-
-                // Process complete lines from the buffer
-                const lines = buffer.split('\n');
-                // Keep the last incomplete line in the buffer
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                  if (!line.trim()) continue;
-
-                  // AI SDK stream format: lines start with "0:", "1:", etc. followed by JSON
-                  const match = line.match(/^\d+:(.*)$/);
-                  if (match) {
-                    try {
-                      const jsonStr = match[1];
-                      const data = JSON.parse(jsonStr);
-
-                      // Extract text deltas
-                      if (data.type === 'text-delta' && data.textDelta) {
-                        collectedText += data.textDelta;
-                      }
-
-                      // Extract full text from text chunks
-                      if (data.type === 'text' && data.text) {
-                        collectedText = data.text; // Replace with full text if available
-                      }
-
-                      // Extract usage from finish event or metadata
-                      if (data.type === 'finish') {
-                        if (data.usage) {
-                          collectedUsage = {
-                            promptTokens:
-                              data.usage.promptTokens ??
-                              data.usage.inputTokens ??
-                              0,
-                            completionTokens:
-                              data.usage.completionTokens ??
-                              data.usage.outputTokens ??
-                              0,
-                            totalTokens:
-                              data.usage.totalTokens ??
-                              (data.usage.promptTokens ??
-                                data.usage.inputTokens ??
-                                0) +
-                                (data.usage.completionTokens ??
-                                  data.usage.outputTokens ??
-                                  0),
-                          };
-                        }
-                      }
-
-                      // Also check for usage in message metadata
-                      if (data.metadata?.usage) {
-                        collectedUsage = {
-                          promptTokens: data.metadata.usage.promptTokens ?? 0,
-                          completionTokens:
-                            data.metadata.usage.completionTokens ?? 0,
-                          totalTokens:
-                            data.metadata.usage.totalTokens ??
-                            (data.metadata.usage.promptTokens ?? 0) +
-                              (data.metadata.usage.completionTokens ?? 0),
-                        };
-                      }
-                    } catch (parseError) {
-                      // Ignore parse errors for malformed JSON
-                      console.debug(
-                        '[CodeReview] Failed to parse stream line:',
-                        line.substring(0, 100),
-                      );
-                    }
-                  }
-                }
-              }
-
-              // Process any remaining buffer
-              if (buffer.trim()) {
-                const match = buffer.match(/^\d+:(.*)$/);
-                if (match) {
-                  try {
-                    const data = JSON.parse(match[1]);
-                    if (data.type === 'text-delta' && data.textDelta) {
-                      collectedText += data.textDelta;
-                    }
-                    if (data.type === 'finish' && data.usage) {
-                      collectedUsage = {
-                        promptTokens:
-                          data.usage.promptTokens ??
-                          data.usage.inputTokens ??
-                          0,
-                        completionTokens:
-                          data.usage.completionTokens ??
-                          data.usage.outputTokens ??
-                          0,
-                        totalTokens:
-                          data.usage.totalTokens ??
-                          (data.usage.promptTokens ??
-                            data.usage.inputTokens ??
-                            0) +
-                            (data.usage.completionTokens ??
-                              data.usage.outputTokens ??
-                              0),
-                      };
-                    }
-                  } catch (e) {
-                    // Ignore parse errors
-                  }
-                }
-              }
-
-              // Stream finished, post comment to GitHub
-              if (collectedText && prInfo && resolvedGithubToken) {
-                console.log(
-                  '[CodeReview] Stream completed, posting PR comment:',
-                  {
-                    textLength: collectedText.length,
-                    textPreview: collectedText.substring(0, 200),
-                    usage: collectedUsage,
-                    prInfo,
-                  },
-                );
-
-                // Post comment asynchronously (don't block the response)
-                postPRComment(
-                  resolvedGithubToken,
-                  prInfo.owner,
-                  prInfo.repo,
-                  prInfo.prNumber,
-                  collectedText,
-                  collectedUsage || undefined,
-                ).catch((error) => {
+              // Post comment asynchronously (don't block the response)
+              // This happens after the stream has fully completed
+              postPRComment(
+                resolvedGithubToken,
+                prInfo,
+                result.text,
+                result.usage || undefined,
+              )
+                .then(() => {
+                  console.log(
+                    `[CodeReview] Successfully posted PR comment to ${prInfo.owner}/${prInfo.repo}#${prInfo.prNumber}`,
+                  );
+                })
+                .catch((error) => {
                   console.error(
                     '[CodeReview] Failed to post PR comment after streaming:',
                     {
@@ -637,29 +390,23 @@ You will be given a file path and you will review the code in that file.`;
                         error instanceof Error ? error.message : String(error),
                       stack: error instanceof Error ? error.stack : undefined,
                       prInfo,
-                      textLength: collectedText.length,
+                      textLength: result.text.length,
                     },
                   );
                 });
-              } else {
-                console.warn(
-                  '[CodeReview] Stream completed but not posting comment:',
-                  {
-                    hasText: !!collectedText,
-                    textLength: collectedText.length,
-                    hasPrInfo: !!prInfo,
-                    hasToken: !!resolvedGithubToken,
-                  },
-                );
-              }
-
-              controller.close();
-            } catch (error) {
-              console.error('[CodeReview] Error processing stream:', error);
-              controller.error(error);
+            } else {
+              console.warn(
+                '[CodeReview] Stream completed but not posting comment:',
+                {
+                  hasText: !!result.text,
+                  textLength: result.text.length,
+                  hasPrInfo: !!prInfo,
+                  hasToken: !!resolvedGithubToken,
+                },
+              );
             }
           },
-        });
+        );
 
         // Return a new response with the transformed stream
         return new Response(transformedStream, {
