@@ -26,7 +26,6 @@ export interface AIHandlerOptions {
   enableStepLogging?: boolean; // Whether to log tool calls and results
   contextFileHash?: string; // Hash of context file for cache key generation
   fallbackModels?: string[]; // Fallback models for Vercel AI Gateway (providerOptions.gateway.models)
-  onStreamFinish?: (text: string, usage: { promptTokens: number; completionTokens: number; totalTokens: number }) => void; // Callback when stream finishes with full text and usage
 }
 
 export async function handleAIRequest(options: AIHandlerOptions) {
@@ -44,7 +43,6 @@ export async function handleAIRequest(options: AIHandlerOptions) {
     enableStepLogging = false,
     contextFileHash,
     fallbackModels,
-    onStreamFinish,
   } = options;
 
   // Check credits
@@ -214,22 +212,12 @@ export async function handleAIRequest(options: AIHandlerOptions) {
         console.log(
           `[${logPrefix}] Stream finished. Reason: ${finishReason}, Tokens: ${usage.inputTokens}/${usage.outputTokens}`,
         );
-        // Store text and usage for messageMetadata and PR comments
+        // Store text and usage for messageMetadata
         collectedText = text;
         streamUsage = {
           inputTokens: usage.inputTokens ?? 0,
           outputTokens: usage.outputTokens ?? 0,
         };
-        
-        // Call onStreamFinish callback if provided (for PR comments, etc.)
-        if (onStreamFinish) {
-          const tokenUsage = {
-            promptTokens: usage.inputTokens ?? 0,
-            completionTokens: usage.outputTokens ?? 0,
-            totalTokens: (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0),
-          };
-          onStreamFinish(text, tokenUsage);
-        }
         
         deductCredits(
           modelName,

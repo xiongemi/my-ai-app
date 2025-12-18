@@ -6,15 +6,18 @@ import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useApiKeys, Message } from '@/components/AISettingsPanel';
 import { useBilling } from '@/components/Billing';
 import { getDefaultModel } from '@/lib/models';
+import type { UIMessage } from 'ai';
 
 interface UseAIChatOptions {
   /** API endpoint to call */
   endpoint: string;
   /** Extra body parameters to include in requests (can be a function for dynamic values) */
   extraBody?: () => Record<string, unknown>;
+  /** Optional callback when stream finishes */
+  onFinish?: (message: UIMessage) => void;
 }
 
-export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
+export function useAIChat({ endpoint, extraBody, onFinish: onFinishCallback }: UseAIChatOptions) {
   const [selectedProvider, setSelectedProvider] = useState('openai');
   const [selectedModel, setSelectedModel] = useState<string>(() =>
     getDefaultModel('openai'),
@@ -127,6 +130,11 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
         metadata: (message as any).metadata,
       });
       refetchBilling();
+
+      // Call optional finish callback if provided
+      if (onFinishCallback) {
+        onFinishCallback(message);
+      }
     },
   });
 

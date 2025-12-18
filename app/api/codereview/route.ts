@@ -9,9 +9,7 @@ import {
   postPRComment,
   extractPRInfo,
   type PRInfo,
-  type TokenUsage,
 } from '@/lib/github-pr';
-import { transformStreamToCollectData } from '@/lib/stream-utils';
 
 // Shared tools
 export const codeTools = {
@@ -322,8 +320,9 @@ You will be given a file path and you will review the code in that file.`;
       }
     }
 
-    // For streaming with githubToken, use onStreamFinish callback to post comment
-    if (stream && resolvedGithubToken && prInfo) {
+    // For streaming, let the frontend handle PR comments via separate endpoint
+    // This is simpler and more reliable than parsing SSE streams
+    if (stream) {
       try {
         const response = await handleAIRequest({
           messages: rawMessages,
@@ -339,49 +338,12 @@ You will be given a file path and you will review the code in that file.`;
           logPrefix: 'CodeReview',
           contextFileHash: contextFile?.hash,
           fallbackModels,
-          onStreamFinish: (text, usage) => {
-            // Stream finished - post comment to GitHub
-            console.log(
-              '[CodeReview] Stream completed, posting PR comment:',
-              {
-                textLength: text.length,
-                textPreview: text.substring(0, 200),
-                usage,
-                prInfo,
-              },
-            );
-
-            // Post comment asynchronously (don't block the response)
-            postPRComment(
-              resolvedGithubToken,
-              prInfo,
-              text,
-              usage,
-            )
-              .then(() => {
-                console.log(
-                  `[CodeReview] Successfully posted PR comment to ${prInfo.owner}/${prInfo.repo}#${prInfo.prNumber}`,
-                );
-              })
-              .catch((error) => {
-                console.error(
-                  '[CodeReview] Failed to post PR comment after streaming:',
-                  {
-                    error:
-                      error instanceof Error ? error.message : String(error),
-                    stack: error instanceof Error ? error.stack : undefined,
-                    prInfo,
-                    textLength: text.length,
-                  },
-                );
-              });
-          },
         });
 
         return response;
       } catch (error) {
         console.error(
-          '[CodeReview] Error in streaming with githubToken:',
+          '[CodeReview] Error in streaming:',
           error,
         );
         // If there's an error, fall back to normal streaming without comment posting
