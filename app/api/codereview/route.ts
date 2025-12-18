@@ -100,6 +100,87 @@ export const codeTools = {
   }),
 };
 
+// Helper function to extract PR info from URL or messages
+function extractPRInfo(
+  prUrl?: string,
+  messages?: UIMessage[] | Array<{ role: string; content: string }>,
+): { owner: string; repo: string; prNumber: string } | null {
+  // First try explicit prUrl parameter
+  if (prUrl) {
+    const match = prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i);
+    if (match) {
+      return { owner: match[1], repo: match[2], prNumber: match[3] };
+    }
+  }
+
+  // Otherwise, try to extract from messages
+  if (messages) {
+    for (const message of messages) {
+      let content = '';
+      
+      // Handle UIMessage type (has parts array)
+      if ('parts' in message && Array.isArray(message.parts)) {
+        content = message.parts
+          .map((p: any) => (p.type === 'text' ? p.text : ''))
+          .join('');
+      }
+      // Handle simple { role, content } type
+      else if ('content' in message && typeof message.content === 'string') {
+        content = message.content;
+      }
+      // Handle array content type
+      else if ('content' in message && Array.isArray(message.content)) {
+        content = (message.content as any[])
+          .map((p: any) => (p.type === 'text' ? p.text : ''))
+          .join('');
+      }
+
+      const match = content.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i);
+      if (match) {
+        return { owner: match[1], repo: match[2], prNumber: match[3] };
+      }
+    }
+  }
+
+  return null;
+}
+
+// Helper function to post comment to GitHub PR
+async function postPRComment(
+  githubToken: string,
+  owner: string,
+  repo: string,
+  prNumber: string,
+  reviewText: string,
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number },
+): Promise<void> {
+  let commentBody = `## 🤖 AI Code Review\n\n${reviewText}`;
+
+  if (usage && usage.totalTokens > 0) {
+    commentBody += `\n\n---\n**Usage:** ${usage.promptTokens} prompt + ${usage.completionTokens} completion = ${usage.totalTokens} tokens`;
+  }
+
+  const response = await fetch(
+    `https://api.github.com/repos/${owner}/${repo}/issues/${prNumber}/comments`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `token ${githubToken}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ body: commentBody }),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to post PR comment: ${response.status} ${response.statusText}. ${errorText}`,
+    );
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const {
@@ -111,6 +192,8 @@ export async function POST(req: Request) {
       systemPrompt, // Custom system prompt
       contextFile, // Optional context file with name, content, and hash
       fallbackModels, // Optional fallback models for Vercel AI Gateway
+      githubToken, // Optional GitHub token for posting PR comments
+      prUrl, // Optional explicit PR URL (otherwise extracted from messages)
       // Note: The hash field enables future caching. If the context file hash hasn't changed,
       // you could cache embeddings or processed context to avoid reprocessing the same content.
       // Cache key could be: `context-${contextFile.hash}` or similar.
@@ -127,6 +210,8 @@ export async function POST(req: Request) {
         hash: string; // SHA-256 hash of file content for cache invalidation
       };
       fallbackModels?: string[]; // Array of fallback model IDs for Vercel AI Gateway
+      githubToken?: string; // GitHub token for posting PR comments
+      prUrl?: string; // Explicit PR URL (optional, will be extracted from messages if not provided)
     } = await req.json();
 
     // Build enhanced system prompt with context file if provided
@@ -137,6 +222,77 @@ You will be given a file path and you will review the code in that file.`;
 
     if (contextFile) {
       enhancedSystemPrompt += `\n\n## Repository Context\n\nThe following context file (${contextFile.name}) provides additional information about this repository:\n\n${contextFile.content}\n\nUse this context to better understand the codebase when reviewing files.`;
+    }
+
+    // Get GitHub token from request or environment
+    const resolvedGithubToken =
+      githubToken || process.env.GITHUB_TOKEN || undefined;
+
+    // Extract PR info if githubToken is provided
+    const prInfo = resolvedGithubToken
+      ? extractPRInfo(prUrl, rawMessages)
+      : null;
+
+    // If githubToken is provided but no PR info found, warn but continue
+    if (resolvedGithubToken && !prInfo) {
+      console.warn(
+        '[CodeReview] GitHub token provided but no PR URL found in request. Comment will not be posted.',
+      );
+    }
+
+    // For non-streaming with githubToken, we need to intercept the response to post comment
+    if (!stream && resolvedGithubToken && prInfo) {
+      // Call handleAIRequest and get the response
+      const response = await handleAIRequest({
+        messages: rawMessages,
+        provider: providerId,
+        apiKey,
+        model: requestedModel,
+        stream: false,
+        systemPrompt: enhancedSystemPrompt,
+        tools: codeTools,
+        stopWhen: stepCountIs(20),
+        enableUsageMetadata: true,
+        enableStepLogging: true,
+        logPrefix: 'CodeReview',
+        contextFileHash: contextFile?.hash,
+        fallbackModels,
+      });
+
+      // Extract text and usage from response
+      const responseData = await response.json();
+      const reviewText = responseData.text || '';
+      const usage = responseData.usage;
+
+      // Post comment to GitHub PR
+      if (reviewText && prInfo && resolvedGithubToken) {
+        try {
+          await postPRComment(
+            resolvedGithubToken,
+            prInfo.owner,
+            prInfo.repo,
+            prInfo.prNumber,
+            reviewText,
+            usage,
+          );
+          console.log(
+            `[CodeReview] Successfully posted PR comment to ${prInfo.owner}/${prInfo.repo}#${prInfo.prNumber}`,
+          );
+        } catch (error) {
+          console.error('[CodeReview] Failed to post PR comment:', error);
+          // Don't fail the request if comment posting fails
+        }
+      }
+
+      return NextResponse.json(responseData);
+    }
+
+    // For streaming, we can't easily intercept and post comment, so we'll skip it
+    // Users can use non-streaming mode when they want automatic PR comments
+    if (stream && resolvedGithubToken && prInfo) {
+      console.warn(
+        '[CodeReview] GitHub token provided but streaming is enabled. PR comments are only posted for non-streaming requests. Set stream=false to enable automatic PR comments.',
+      );
     }
 
     // Use handleAIRequest from the shared library, with codereview-specific options
