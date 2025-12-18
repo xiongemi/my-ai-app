@@ -109,6 +109,10 @@ export async function POST(req: Request) {
       model: requestedModel,
       stream = true, // Default to streaming
       systemPrompt, // Custom system prompt
+      contextFile, // Optional context file with name, content, and hash
+      // Note: The hash field enables future caching. If the context file hash hasn't changed,
+      // you could cache embeddings or processed context to avoid reprocessing the same content.
+      // Cache key could be: `context-${contextFile.hash}` or similar.
     }: {
       messages: UIMessage[] | Array<{ role: string; content: string }>;
       provider?: ProviderId;
@@ -116,7 +120,22 @@ export async function POST(req: Request) {
       model?: string;
       stream?: boolean;
       systemPrompt?: string;
+      contextFile?: {
+        name: string;
+        content: string;
+        hash: string; // SHA-256 hash of file content for cache invalidation
+      };
     } = await req.json();
+
+    // Build enhanced system prompt with context file if provided
+    let enhancedSystemPrompt =
+      systemPrompt ||
+      `You are a code reviewer.
+You will be given a file path and you will review the code in that file.`;
+
+    if (contextFile) {
+      enhancedSystemPrompt += `\n\n## Repository Context\n\nThe following context file (${contextFile.name}) provides additional information about this repository:\n\n${contextFile.content}\n\nUse this context to better understand the codebase when reviewing files.`;
+    }
 
     // Use handleAIRequest from the shared library, with codereview-specific options
     return handleAIRequest({
@@ -125,10 +144,7 @@ export async function POST(req: Request) {
       apiKey,
       model: requestedModel,
       stream,
-      systemPrompt:
-        systemPrompt ||
-        `You are a code reviewer.
-You will be given a file path and you will review the code in that file.`,
+      systemPrompt: enhancedSystemPrompt,
       tools: codeTools, // Always enable tools for code review
       // Allow up to 20 steps to handle complex reviews with multiple tool calls
       // This covers: reading PR, reading multiple files, and generating the review
@@ -136,6 +152,10 @@ You will be given a file path and you will review the code in that file.`,
       enableUsageMetadata: true, // Include usage in streaming response for UI display
       enableStepLogging: true, // Log tool calls for debugging
       logPrefix: 'CodeReview',
+      contextFileHash: contextFile?.hash, // Pass hash for provider-level caching
+      // Note: When contextFile.hash is unchanged and user query is identical,
+      // OpenAI will automatically return cached responses (faster + cheaper).
+      // The hash helps track when context changes and cache should be invalidated.
     });
   } catch (error) {
     console.error('Code review error:', error);

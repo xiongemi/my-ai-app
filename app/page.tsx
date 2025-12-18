@@ -1,13 +1,22 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Code, GitPullRequest, AlertCircle, X, Sparkles } from 'lucide-react';
+import { useState, useCallback, useRef } from 'react';
+import { Code, GitPullRequest, AlertCircle, X, Sparkles, FileText, Upload } from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { useVercelGatewayFallbackModels } from '@/components/VercelGatewayFallbackModels';
 
 type InputMode = 'file' | 'pr';
+
+// Simple hash function for file content (for caching purposes)
+async function hashFileContent(content: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(content);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 export default function Home() {
   const [inputMode, setInputMode] = useState<InputMode>('file');
@@ -16,14 +25,57 @@ export default function Home() {
   );
   const [showSettings, setShowSettings] = useState(false);
   const [fallbackModels, setFallbackModels] = useVercelGatewayFallbackModels();
+  const [contextFile, setContextFile] = useState<{
+    name: string;
+    content: string;
+    hash: string;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle file upload
+  const handleFileUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      try {
+        const content = await file.text();
+        const hash = await hashFileContent(content);
+        setContextFile({
+          name: file.name,
+          content,
+          hash,
+        });
+      } catch (error) {
+        console.error('Error reading file:', error);
+        alert('Failed to read file. Please try again.');
+      }
+    },
+    [],
+  );
+
+  // Remove context file
+  const handleRemoveContextFile = useCallback(() => {
+    setContextFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
 
   // Use useCallback so the function reference is stable
   const getExtraBody = useCallback(
     () => ({
       systemPrompt,
       ...(fallbackModels.length > 0 && { fallbackModels }),
+      ...(contextFile && {
+        contextFile: {
+          name: contextFile.name,
+          content: contextFile.content,
+          hash: contextFile.hash, // Include hash for future caching
+        },
+      }),
     }),
-    [systemPrompt, fallbackModels],
+    [systemPrompt, fallbackModels, contextFile],
   );
 
   const {
@@ -97,6 +149,43 @@ export default function Home() {
                   rows={3}
                   className="w-full p-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white placeholder-zinc-400 resize-none"
                 />
+              </div>
+
+              {/* Context File Upload */}
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                  Repository Context File (Optional)
+                </label>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Upload a file containing repository context (e.g., documentation, architecture overview) to help the AI understand your codebase better.
+                </p>
+                {contextFile ? (
+                  <div className="flex items-center gap-2 p-2 rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800">
+                    <FileText size={16} className="text-zinc-600 dark:text-zinc-400" />
+                    <span className="flex-1 text-sm text-zinc-900 dark:text-zinc-100 truncate">
+                      {contextFile.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleRemoveContextFile}
+                      className="text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-md bg-white dark:bg-zinc-800 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors">
+                    <Upload size={16} />
+                    <span>Choose file...</span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      accept=".txt,.md,.json,.yaml,.yml"
+                    />
+                  </label>
+                )}
               </div>
             </div>
           )}

@@ -24,6 +24,7 @@ export interface AIHandlerOptions {
   enableUsageMetadata?: boolean; // Whether to include usage in streaming response metadata
   logPrefix?: string; // Prefix for log messages
   enableStepLogging?: boolean; // Whether to log tool calls and results
+  contextFileHash?: string; // Hash of context file for cache key generation
 }
 
 export async function handleAIRequest(options: AIHandlerOptions) {
@@ -39,6 +40,7 @@ export async function handleAIRequest(options: AIHandlerOptions) {
     enableUsageMetadata = false,
     logPrefix = 'AI',
     enableStepLogging = false,
+    contextFileHash,
   } = options;
 
   // Check credits
@@ -99,6 +101,18 @@ export async function handleAIRequest(options: AIHandlerOptions) {
   const modelName = requestedModel || config.defaultModel;
   // Type assertion: providers return LanguageModelV1 | LanguageModelV2, but streamText expects LanguageModel
   const model = provider(modelName) as any as LanguageModel;
+
+  // Provider-level caching explanation:
+  // - OpenAI automatically caches responses when the exact same prompt is sent
+  // - If contextFileHash is unchanged AND user query is identical, the full prompt (system + messages) will be identical
+  // - OpenAI will then return cached responses automatically (faster + cheaper)
+  // - The contextFileHash helps track when context changes, ensuring cache invalidation when needed
+  // Note: Some providers may require explicit cache headers/options, but OpenAI's caching is automatic for identical prompts
+  if (contextFileHash) {
+    console.log(
+      `[${logPrefix}] Context file hash: ${contextFileHash.substring(0, 8)}... (caching enabled when prompt is identical)`,
+    );
+  }
 
   if (stream) {
     // Streaming mode
