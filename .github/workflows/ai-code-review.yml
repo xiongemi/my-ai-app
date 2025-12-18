@@ -188,7 +188,8 @@ jobs:
             echo "Posting review comment to PR #$PR_NUMBER..."
             
             # Build comment body with unique marker for potential future deduplication
-            COMMENT_BODY="## 🤖 AI Code Review\n\n<!-- ai-code-review-bot -->\n\n$REVIEW_TEXT"
+            # Use printf to properly handle newlines in markdown
+            COMMENT_BODY=$(printf "## 🤖 AI Code Review\n\n<!-- ai-code-review-bot -->\n\n%s" "$REVIEW_TEXT")
             
             # Add usage information if available
             if [ "$USAGE" != "null" ] && [ -n "$USAGE" ]; then
@@ -197,7 +198,7 @@ jobs:
               TOTAL_TOKENS=$(echo "$USAGE" | jq -r '.totalTokens // .total_tokens // 0')
               
               if [ "$TOTAL_TOKENS" != "0" ] && [ "$TOTAL_TOKENS" != "null" ]; then
-                COMMENT_BODY="$COMMENT_BODY\n\n---\n**Usage:** $PROMPT_TOKENS prompt + $COMPLETION_TOKENS completion = $TOTAL_TOKENS tokens"
+                COMMENT_BODY=$(printf "%s\n\n---\n**Usage:** %s prompt + %s completion = %s tokens" "$COMMENT_BODY" "$PROMPT_TOKENS" "$COMPLETION_TOKENS" "$TOTAL_TOKENS")
               fi
             fi
             
