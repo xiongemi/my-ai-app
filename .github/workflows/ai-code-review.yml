@@ -2,7 +2,7 @@ name: AI Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, reopened, review_requested, ready_for_review, synchronize]
 
 jobs:
   review:
@@ -37,11 +37,18 @@ jobs:
           # GITHUB_TOKEN is automatically provided by GitHub Actions - no need to set it as a secret
           # It's available as ${{ secrets.GITHUB_TOKEN }} or via the GITHUB_TOKEN environment variable
         run: |
-          # Get PR information
+          # Get PR information (define early for use throughout workflow)
           PR_URL="${{ github.event.pull_request.html_url }}"
           PR_NUMBER="${{ github.event.pull_request.number }}"
           REPO_OWNER="${{ github.repository_owner }}"
           REPO_NAME="${{ github.event.repository.name }}"
+          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          
+          # Validate required variables
+          if [ -z "$PR_NUMBER" ] || [ -z "$REPO_OWNER" ] || [ -z "$REPO_NAME" ]; then
+            echo "::error::Missing required PR information: PR_NUMBER=$PR_NUMBER, REPO_OWNER=$REPO_OWNER, REPO_NAME=$REPO_NAME"
+            exit 1
+          fi
 
           # Set defaults if not provided
           AI_PROVIDER="${AI_PROVIDER:-openai}"
@@ -82,14 +89,6 @@ jobs:
             # Convert comma-separated string to JSON array
             FALLBACK_ARRAY=$(echo "$AI_FALLBACK_MODELS" | jq -R -s -c 'split(",") | map(select(length > 0) | gsub("^\\s+|\\s+$"; ""))')
             BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --argjson fallbacks "$FALLBACK_ARRAY" '. + {"fallbackModels": $fallbacks}')
-          fi
-
-          # Add GitHub token and PR URL for automatic comment posting
-          # GITHUB_TOKEN is automatically provided by GitHub Actions
-          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
-          if [ -n "$GITHUB_TOKEN" ]; then
-            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg token "$GITHUB_TOKEN" '. + {"githubToken": $token}')
-            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg url "$PR_URL" '. + {"prUrl": $url}')
           fi
 
           REQUEST_PAYLOAD="$BASE_PAYLOAD"
@@ -172,9 +171,10 @@ jobs:
             exit 1
           fi
 
-          # Extract the review text from the response
+          # Extract the review text and usage from the response
           # The API returns { text: "...", usage: {...} } for non-streaming
           REVIEW_TEXT=$(echo "$REVIEW_RESPONSE" | jq -r '.text // empty')
+          USAGE=$(echo "$REVIEW_RESPONSE" | jq '.usage // empty')
 
           if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" = "null" ]; then
             echo "Error: No review content received"
@@ -183,10 +183,95 @@ jobs:
             exit 1
           fi
 
-          # If githubToken was provided, the API automatically posted the comment
-          # Otherwise, we would need to post it manually here (but that's not needed anymore)
+          # Post comment to GitHub PR using GitHub API
           if [ -n "$GITHUB_TOKEN" ]; then
-            echo "Review completed! Comment should be automatically posted to PR #$PR_NUMBER"
+            echo "Posting review comment to PR #$PR_NUMBER..."
+            
+            # Build comment body with unique marker for potential future deduplication
+            COMMENT_BODY="## 🤖 AI Code Review\n\n<!-- ai-code-review-bot -->\n\n$REVIEW_TEXT"
+            
+            # Add usage information if available
+            if [ "$USAGE" != "null" ] && [ -n "$USAGE" ]; then
+              PROMPT_TOKENS=$(echo "$USAGE" | jq -r '.promptTokens // .prompt_tokens // 0')
+              COMPLETION_TOKENS=$(echo "$USAGE" | jq -r '.completionTokens // .completion_tokens // 0')
+              TOTAL_TOKENS=$(echo "$USAGE" | jq -r '.totalTokens // .total_tokens // 0')
+              
+              if [ "$TOTAL_TOKENS" != "0" ] && [ "$TOTAL_TOKENS" != "null" ]; then
+                COMMENT_BODY="$COMMENT_BODY\n\n---\n**Usage:** $PROMPT_TOKENS prompt + $COMPLETION_TOKENS completion = $TOTAL_TOKENS tokens"
+              fi
+            fi
+            
+            # Check for existing bot comment and update if found, otherwise create new
+            EXISTING_COMMENT_ID=$(curl -s \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -H "User-Agent: my-ai-app/ai-code-review" \
+              "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" \
+              | jq -r '.[] | select(.body | contains("<!-- ai-code-review-bot -->")) | .id' | head -n1)
+            
+            COMMENT_JSON_BODY=$(echo "$COMMENT_BODY" | jq -Rs .)
+            
+            if [ -n "$EXISTING_COMMENT_ID" ] && [ "$EXISTING_COMMENT_ID" != "null" ]; then
+              echo "Updating existing comment (ID: $EXISTING_COMMENT_ID)..."
+              COMMENT_RESPONSE=$(curl -s -w "\n%{http_code}" -X PATCH \
+                "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/comments/$EXISTING_COMMENT_ID" \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                -H "Content-Type: application/json" \
+                -H "User-Agent: my-ai-app/ai-code-review" \
+                -d "{\"body\": $COMMENT_JSON_BODY}")
+            else
+              echo "Creating new comment..."
+              COMMENT_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+                "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" \
+                -H "Authorization: Bearer $GITHUB_TOKEN" \
+                -H "Accept: application/vnd.github.v3+json" \
+                -H "Content-Type: application/json" \
+                -H "User-Agent: my-ai-app/ai-code-review" \
+                -d "{\"body\": $COMMENT_JSON_BODY}")
+            fi
+            
+            COMMENT_HTTP_CODE=$(echo "$COMMENT_RESPONSE" | tail -n1 | tr -d '[:space:]')
+            COMMENT_BODY_RESPONSE=$(echo "$COMMENT_RESPONSE" | sed '$d')
+            
+            # Handle specific HTTP status codes
+            case "$COMMENT_HTTP_CODE" in
+              200|201)
+                echo "✅ Successfully posted review comment to PR #$PR_NUMBER"
+                ;;
+              403)
+                echo "::error::Failed to post PR comment: Forbidden (HTTP 403)"
+                echo "This usually indicates:"
+                echo "  - Rate limit exceeded (check GitHub API rate limits)"
+                echo "  - Insufficient permissions for GITHUB_TOKEN"
+                echo "  - Token has expired or been revoked"
+                echo "Comment response: $COMMENT_BODY_RESPONSE"
+                ;;
+              404)
+                echo "::error::Failed to post PR comment: Not Found (HTTP 404)"
+                echo "This usually indicates:"
+                echo "  - PR #$PR_NUMBER not found in $REPO_OWNER/$REPO_NAME"
+                echo "  - Repository or issue doesn't exist"
+                echo "  - GITHUB_TOKEN doesn't have access to this repository"
+                echo "Comment response: $COMMENT_BODY_RESPONSE"
+                ;;
+              422)
+                echo "::error::Failed to post PR comment: Validation Error (HTTP 422)"
+                echo "This usually indicates:"
+                echo "  - Comment body is too long or contains invalid characters"
+                echo "  - PR is locked or in a state that doesn't allow comments"
+                echo "Comment response: $COMMENT_BODY_RESPONSE"
+                ;;
+              *)
+                if [ "$COMMENT_HTTP_CODE" -ge 200 ] && [ "$COMMENT_HTTP_CODE" -lt 300 ]; then
+                  echo "✅ Successfully posted review comment to PR #$PR_NUMBER"
+                else
+                  echo "::warning::Failed to post PR comment (HTTP $COMMENT_HTTP_CODE)"
+                  echo "Comment response: $COMMENT_BODY_RESPONSE"
+                  echo "Review was still generated successfully, but comment was not posted."
+                fi
+                ;;
+            esac
           else
-            echo "Review completed! (No GitHub token provided, comment not posted)"
+            echo "Review completed! (No GitHub token available, comment not posted)"
           fi
