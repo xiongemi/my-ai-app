@@ -46,6 +46,26 @@ function extractFromStreamData(
   let text = currentText;
   let usage = currentUsage;
 
+  // Log all stream events to understand format (use console.log so it shows up)
+  if (data.type) {
+    console.log('[StreamUtils] Processing stream event:', {
+      type: data.type,
+      hasTextDelta: !!data.textDelta,
+      hasText: !!data.text,
+      hasContent: !!data.content,
+      textDeltaPreview: data.textDelta?.substring(0, 100),
+      textPreview: data.text?.substring(0, 100),
+      keys: Object.keys(data),
+      fullData: JSON.stringify(data).substring(0, 500), // Log full data structure
+    });
+  } else {
+    // Log if we get data without a type
+    console.log('[StreamUtils] Data without type:', {
+      keys: Object.keys(data),
+      preview: JSON.stringify(data).substring(0, 200),
+    });
+  }
+
   // Extract text deltas
   if (data.type === 'text-delta' && data.textDelta) {
     text += data.textDelta;
@@ -54,6 +74,22 @@ function extractFromStreamData(
   // Extract full text from text chunks (replaces accumulated text)
   if (data.type === 'text' && data.text) {
     text = data.text;
+  }
+
+  // Handle text-chunk type (alternative format)
+  if (data.type === 'text-chunk' && data.text) {
+    text += data.text;
+  }
+
+  // Handle content array (some providers send content as array)
+  if (data.content && Array.isArray(data.content)) {
+    const textParts = data.content
+      .filter((part: any) => part.type === 'text')
+      .map((part: any) => part.text || part.textDelta || '')
+      .join('');
+    if (textParts) {
+      text += textParts;
+    }
   }
 
   // Extract usage from finish event
@@ -151,6 +187,7 @@ export function transformStreamToCollectData(
   const decoder = new TextDecoder();
   let buffer = '';
   let result: StreamParseResult = { text: '', usage: null };
+  let chunkCount = 0;
 
   return new ReadableStream({
     async start(controller) {
@@ -159,11 +196,35 @@ export function transformStreamToCollectData(
           const { done, value } = await reader.read();
           if (done) break;
 
-          // Forward the chunk immediately
-          controller.enqueue(value);
+          chunkCount++;
+          
+          // Check if controller is still open before enqueueing
+          // This handles the case where the stream was stopped/cancelled
+          try {
+            // Forward the chunk immediately
+            controller.enqueue(value);
+          } catch (enqueueError: any) {
+            // If controller is closed (e.g., stream was stopped), break the loop
+            if (enqueueError?.name === 'InvalidStateError' || enqueueError?.code === 'ERR_INVALID_STATE') {
+              console.log('[StreamUtils] Stream was stopped, controller closed');
+              break;
+            }
+            throw enqueueError;
+          }
 
           // Decode and accumulate chunks for parsing
-          buffer += decoder.decode(value, { stream: true });
+          const decoded = decoder.decode(value, { stream: true });
+          buffer += decoded;
+
+          // Log first few chunks to understand format (use console.log so it shows up)
+          if (chunkCount <= 5) {
+            console.log('[StreamUtils] Chunk', chunkCount, ':', {
+              length: decoded.length,
+              preview: decoded.substring(0, 300),
+              hasNewline: decoded.includes('\n'),
+              firstChars: Array.from(decoded.substring(0, 50)).map(c => c.charCodeAt(0)),
+            });
+          }
 
           // Process complete lines from the buffer
           const processed = processStreamBuffer(buffer, result);
@@ -174,14 +235,59 @@ export function transformStreamToCollectData(
         // Process any remaining buffer
         result = processRemainingBuffer(buffer, result);
 
-        // Call completion callback
-        onComplete(result);
+        // Log final result
+        console.log('[StreamUtils] Stream completed:', {
+          chunkCount,
+          textLength: result.text.length,
+          hasUsage: !!result.usage,
+          remainingBufferLength: buffer.length,
+          bufferPreview: buffer.substring(0, 500), // Show what's left in buffer
+          lastFewLines: buffer.split('\n').slice(-5), // Show last few lines
+        });
 
-        controller.close();
-      } catch (error) {
+        // Call completion callback only if we have text (stream wasn't stopped early)
+        if (result.text) {
+          onComplete(result);
+        }
+
+        // Only close controller if it's still open
+        try {
+          controller.close();
+        } catch (closeError: any) {
+          // Controller might already be closed if stream was stopped
+          if (closeError?.name !== 'InvalidStateError' && closeError?.code !== 'ERR_INVALID_STATE') {
+            console.warn('[StreamUtils] Error closing controller:', closeError);
+          }
+        }
+      } catch (error: any) {
+        // Handle cancellation/abort gracefully
+        if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
+          console.log('[StreamUtils] Stream was aborted');
+          try {
+            controller.close();
+          } catch {
+            // Controller might already be closed
+          }
+          return;
+        }
+        
         console.error('[StreamUtils] Error processing stream:', error);
-        controller.error(error);
+        try {
+          controller.error(error);
+        } catch (errorError: any) {
+          // Controller might already be closed
+          if (errorError?.name !== 'InvalidStateError' && errorError?.code !== 'ERR_INVALID_STATE') {
+            console.error('[StreamUtils] Error setting error on controller:', errorError);
+          }
+        }
       }
+    },
+    cancel() {
+      // Handle stream cancellation (e.g., when stop button is clicked)
+      console.log('[StreamUtils] Stream cancelled');
+      reader.cancel().catch(() => {
+        // Ignore cancellation errors
+      });
     },
   });
 }

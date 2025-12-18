@@ -104,6 +104,7 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     messages: streamingMessages,
     status,
     sendMessage,
+    stop,
     error: useChatError,
     clearError: clearUseChatError,
   } = useChat({
@@ -160,6 +161,24 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     }
   }, [streamingMessages, useStreaming]);
 
+  // Abort controller for non-streaming requests
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Stop handler
+  const handleStop = useCallback(() => {
+    if (useStreaming) {
+      // Stop streaming request
+      stop();
+    } else {
+      // Abort non-streaming request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+        setIsNonStreamingLoading(false);
+      }
+    }
+  }, [useStreaming, stop]);
+
   // Non-streaming submit handler
   const handleNonStreamingSubmit = useCallback(async () => {
     if (!inputValue.trim() || isLoading) return;
@@ -174,6 +193,9 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
     setInputValue('');
     setIsNonStreamingLoading(true);
     setNonStreamingError(null);
+
+    // Create abort controller for this request
+    abortControllerRef.current = new AbortController();
 
     try {
       const requestBody = {
@@ -197,6 +219,7 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
+        signal: abortControllerRef.current.signal,
       });
 
       let data;
@@ -241,12 +264,18 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
       setNonStreamingMessages((prev) => [...prev, assistantMessage]);
       refetchBilling();
     } catch (error) {
-      console.error('Error:', error);
-      setNonStreamingError(
-        error instanceof Error ? error : new Error(String(error)),
-      );
+      // Don't set error if request was aborted
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('Request aborted by user');
+      } else {
+        console.error('Error:', error);
+        setNonStreamingError(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      }
     } finally {
       setIsNonStreamingLoading(false);
+      abortControllerRef.current = null;
     }
   }, [
     inputValue,
@@ -347,6 +376,7 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
 
     // Handlers
     handleSubmit,
+    handleStop,
     clearError,
   };
 }
