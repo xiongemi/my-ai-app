@@ -1,7 +1,14 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { MessageCircle, Send, Sparkles, AlertCircle, X, Square } from 'lucide-react';
+import {
+  MessageCircle,
+  Send,
+  Sparkles,
+  AlertCircle,
+  X,
+  Square,
+} from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';

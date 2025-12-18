@@ -17,7 +17,11 @@ interface UseAIChatOptions {
   onFinish?: (message: UIMessage) => void;
 }
 
-export function useAIChat({ endpoint, extraBody, onFinish: onFinishCallback }: UseAIChatOptions) {
+export function useAIChat({
+  endpoint,
+  extraBody,
+  onFinish: onFinishCallback,
+}: UseAIChatOptions) {
   const [selectedProvider, setSelectedProvider] = useState('openai');
   const [selectedModel, setSelectedModel] = useState<string>(() =>
     getDefaultModel('openai'),

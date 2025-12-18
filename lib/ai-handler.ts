@@ -208,7 +208,15 @@ export async function handleAIRequest(options: AIHandlerOptions) {
             },
           },
         }),
-      onFinish: ({ text, usage, finishReason }: { text: string; usage: { inputTokens?: number; outputTokens?: number }; finishReason: string }) => {
+      onFinish: ({
+        text,
+        usage,
+        finishReason,
+      }: {
+        text: string;
+        usage: { inputTokens?: number; outputTokens?: number };
+        finishReason: string;
+      }) => {
         console.log(
           `[${logPrefix}] Stream finished. Reason: ${finishReason}, Tokens: ${usage.inputTokens}/${usage.outputTokens}`,
         );
@@ -218,7 +226,7 @@ export async function handleAIRequest(options: AIHandlerOptions) {
           inputTokens: usage.inputTokens ?? 0,
           outputTokens: usage.outputTokens ?? 0,
         };
-        
+
         deductCredits(
           modelName,
           usage.inputTokens ?? 0,
@@ -226,7 +234,17 @@ export async function handleAIRequest(options: AIHandlerOptions) {
         );
       },
       ...(enableStepLogging && {
-        onStepFinish: ({ text, toolCalls, toolResults, finishReason }: { text: string; toolCalls?: Array<{ toolName: string }>; toolResults?: unknown[]; finishReason: string }) => {
+        onStepFinish: ({
+          text,
+          toolCalls,
+          toolResults,
+          finishReason,
+        }: {
+          text: string;
+          toolCalls?: Array<{ toolName: string }>;
+          toolResults?: unknown[];
+          finishReason: string;
+        }) => {
           if (toolCalls && toolCalls.length > 0) {
             console.log(
               `[${logPrefix}] Tool calls made: ${toolCalls.map((tc: { toolName: string }) => tc.toolName).join(', ')}`,
@@ -243,7 +261,18 @@ export async function handleAIRequest(options: AIHandlerOptions) {
 
     return result.toUIMessageStreamResponse({
       ...(enableUsageMetadata && {
-        messageMetadata: ({ part }: { part: { type: string; totalUsage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number } } }) => {
+        messageMetadata: ({
+          part,
+        }: {
+          part: {
+            type: string;
+            totalUsage?: {
+              inputTokens?: number;
+              outputTokens?: number;
+              totalTokens?: number;
+            };
+          };
+        }) => {
           // Include usage information when available
           if (part.type === 'finish') {
             // Log what's available in part
@@ -290,7 +319,13 @@ export async function handleAIRequest(options: AIHandlerOptions) {
           return undefined;
         },
       }),
-      onFinish: ({ messages, responseMessage }: { messages: unknown[]; responseMessage: { id: string } & { usage?: unknown } }) => {
+      onFinish: ({
+        messages,
+        responseMessage,
+      }: {
+        messages: unknown[];
+        responseMessage: { id: string } & { usage?: unknown };
+      }) => {
         console.log(
           `[${logPrefix}] Stream completed. Response message ID: ${responseMessage.id}`,
         );

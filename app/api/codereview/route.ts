@@ -241,10 +241,7 @@ You will be given a file path and you will review the code in that file.`;
 
         return NextResponse.json(responseData);
       } catch (error) {
-        console.error(
-          '[CodeReview] Error in non-streaming:',
-          error,
-        );
+        console.error('[CodeReview] Error in non-streaming:', error);
         const errorMessage =
           error instanceof Error ? error.message : 'Unknown error occurred';
         return NextResponse.json(
@@ -278,10 +275,7 @@ You will be given a file path and you will review the code in that file.`;
 
         return response;
       } catch (error) {
-        console.error(
-          '[CodeReview] Error in streaming:',
-          error,
-        );
+        console.error('[CodeReview] Error in streaming:', error);
         // If there's an error, fall back to normal streaming without comment posting
         return handleAIRequest({
           messages: rawMessages,
