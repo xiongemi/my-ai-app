@@ -31,7 +31,7 @@ const GENERIC_SYSTEM_PROMPT =
   'You are a code reviewer. You will be given either a file path or a GitHub pull request URL, and you will review the code accordingly. For file paths, review the single file. For pull requests, review all changed files in the PR.';
 
 export default function Home() {
-  const [inputMode, setInputMode] = useState<InputMode>('file');
+  const [inputMode, setInputMode] = useState<InputMode>('pr');
   const [systemPrompt, setSystemPrompt] = useState(GENERIC_SYSTEM_PROMPT);
   const [hasCustomPrompt, setHasCustomPrompt] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -230,18 +230,6 @@ export default function Home() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => setInputMode('file')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                inputMode === 'file'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-              }`}
-            >
-              <Code size={14} />
-              File Path
-            </button>
-            <button
-              type="button"
               onClick={() => setInputMode('pr')}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 inputMode === 'pr'
@@ -251,6 +239,18 @@ export default function Home() {
             >
               <GitPullRequest size={14} />
               PR Link
+            </button>
+            <button
+              type="button"
+              onClick={() => setInputMode('file')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                inputMode === 'file'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+              }`}
+            >
+              <Code size={14} />
+              File Path
             </button>
           </div>
 

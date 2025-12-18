@@ -102,87 +102,6 @@ tsconfig.json
 <files>
 This section contains the contents of the repository's files.
 
-<file path="components/Billing.tsx">
-'use client';
-
-import React, { useState, useEffect } from 'react';
-
-export interface BillingData {
-  totalCost: number;
-  totalTokens?: number;
-  usageHistory: Array<{
-    timestamp: string;
-    model: string;
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-    cost: number;
-  }>;
-}
-
-// Create a context for billing data so it can be shared across components
-const BillingContext = React.createContext<{
-  billingData: BillingData | null;
-  refetch: () => Promise<void>;
-} | null>(null);
-
-// Hook to fetch billing data - uses context if available, otherwise creates its own state
-export function useBilling() {
-  const context = React.useContext(BillingContext);
-
-  // If context exists, use it
-  if (context) {
-    return context;
-  }
-
-  // Otherwise, create local state (for backward compatibility)
-  const [billingData, setBillingData] = useState<BillingData | null>(null);
-
-  const fetchBilling = async () => {
-    try {
-      const response = await fetch('/api/billing');
-      const data = await response.json();
-      setBillingData(data);
-    } catch (e) {
-      console.error('Failed to fetch billing data', e);
-    }
-  };
-
-  useEffect(() => {
-    fetchBilling();
-  }, []);
-
-  return { billingData, refetch: fetchBilling };
-}
-
-// Provider component to share billing state
-export function BillingProvider({ children }: { children: React.ReactNode }) {
-  const [billingData, setBillingData] = useState<BillingData | null>(null);
-
-  const fetchBilling = async () => {
-    try {
-      const response = await fetch('/api/billing');
-      const data = await response.json();
-      setBillingData(data);
-    } catch (e) {
-      console.error('Failed to fetch billing data', e);
-    }
-  };
-
-  useEffect(() => {
-    fetchBilling();
-    // Billing data is refetched automatically after AI requests complete
-    // via refetch() calls in useAIChat and other components
-  }, []);
-
-  return (
-    <BillingContext.Provider value={{ billingData, refetch: fetchBilling }}>
-      {children}
-    </BillingContext.Provider>
-  );
-}
-</file>
-
 <file path="public/file.svg">
 <svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.5V5.41a1 1 0 0 0-.3-.7L9.8.29A1 1 0 0 0 9.08 0H1.5v13.5A2.5 2.5 0 0 0 4 16h8a2.5 2.5 0 0 0 2.5-2.5m-1.5 0v-7H8v-5H3v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1M9.5 5V2.12L12.38 5zM5.13 5h-.62v1.25h2.12V5zm-.62 3h7.12v1.25H4.5zm.62 3h-.62v1.25h7.12V11z" clip-rule="evenodd" fill="#666" fill-rule="evenodd"/></svg>
 </file>
@@ -524,6 +443,87 @@ You can customize the workflow by:
 - **API endpoint not found**: Make sure `AI_REVIEW_API_ENDPOINT` secret is set correctly
 - **No review posted**: Check the workflow logs for API errors
 - **Authentication errors**: Verify your `AI_API_KEY` secret is correct
+</file>
+
+<file path="components/Billing.tsx">
+'use client';
+
+import React, { useState, useEffect } from 'react';
+
+export interface BillingData {
+  totalCost: number;
+  totalTokens?: number;
+  usageHistory: Array<{
+    timestamp: string;
+    model: string;
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    cost: number;
+  }>;
+}
+
+// Create a context for billing data so it can be shared across components
+const BillingContext = React.createContext<{
+  billingData: BillingData | null;
+  refetch: () => Promise<void>;
+} | null>(null);
+
+// Hook to fetch billing data - uses context if available, otherwise creates its own state
+export function useBilling() {
+  const context = React.useContext(BillingContext);
+
+  // If context exists, use it
+  if (context) {
+    return context;
+  }
+
+  // Otherwise, create local state (for backward compatibility)
+  const [billingData, setBillingData] = useState<BillingData | null>(null);
+
+  const fetchBilling = async () => {
+    try {
+      const response = await fetch('/api/billing');
+      const data = await response.json();
+      setBillingData(data);
+    } catch (e) {
+      console.error('Failed to fetch billing data', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchBilling();
+  }, []);
+
+  return { billingData, refetch: fetchBilling };
+}
+
+// Provider component to share billing state
+export function BillingProvider({ children }: { children: React.ReactNode }) {
+  const [billingData, setBillingData] = useState<BillingData | null>(null);
+
+  const fetchBilling = async () => {
+    try {
+      const response = await fetch('/api/billing');
+      const data = await response.json();
+      setBillingData(data);
+    } catch (e) {
+      console.error('Failed to fetch billing data', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchBilling();
+    // Billing data is refetched automatically after AI requests complete
+    // via refetch() calls in useAIChat and other components
+  }, []);
+
+  return (
+    <BillingContext.Provider value={{ billingData, refetch: fetchBilling }}>
+      {children}
+    </BillingContext.Provider>
+  );
+}
 </file>
 
 <file path="components/MarkdownRenderer.tsx">
@@ -2833,14 +2833,14 @@ export function AISettingsPanel({
       {showCredits && billingData && (
         <div className="flex flex-col gap-1">
           <p className="text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Total Cost:{' '}
+            Estimated Cost:{' '}
             <span className="font-semibold text-black dark:text-white">
               ${billingData?.totalCost?.toFixed(4) ?? 0}
             </span>
           </p>
           {billingData.totalTokens !== undefined && (
             <p className="text-sm text-zinc-500 dark:text-zinc-500">
-              Total Tokens:{' '}
+              Estimated Tokens:{' '}
               <span className="font-semibold text-zinc-700 dark:text-zinc-300">
                 {billingData.totalTokens.toLocaleString()}
               </span>

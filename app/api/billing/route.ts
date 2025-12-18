@@ -4,13 +4,16 @@ import { NextResponse } from 'next/server';
 export function GET() {
   const credits = getCredits();
   const usageHistory = getUsageHistory();
-  
+
   // Calculate total cost from usage history
   const totalCost = usageHistory.reduce((sum, entry) => sum + entry.cost, 0);
-  
+
   // Calculate total tokens consumed
-  const totalTokens = usageHistory.reduce((sum, entry) => sum + entry.totalTokens, 0);
-  
+  const totalTokens = usageHistory.reduce(
+    (sum, entry) => sum + entry.totalTokens,
+    0,
+  );
+
   return NextResponse.json({
     credits,
     totalCost,
