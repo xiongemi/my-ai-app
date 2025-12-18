@@ -16,7 +16,6 @@ import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
 import { useVercelGatewayFallbackModels } from '@/components/VercelGatewayFallbackModels';
-import { postPRCommentAfterReview } from '@/lib/post-pr-comment';
 
 type InputMode = 'file' | 'pr';
 
@@ -117,14 +116,6 @@ export default function Home() {
   } = useAIChat({
     endpoint: '/api/codereview',
     extraBody: getExtraBody,
-    onFinish: (message) => {
-      // Post PR comment if we're in PR mode and have a PR URL in the input
-      if (inputMode === 'pr' && inputValue.trim()) {
-        // Get all messages including the new one
-        const allMessages = [...messages, message] as UIMessage[];
-        postPRCommentAfterReview(message, allMessages);
-      }
-    },
   });
 
   const currentProvider = providers.find((p) => p.id === selectedProvider);
