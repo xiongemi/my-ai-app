@@ -21,10 +21,20 @@ jobs:
 
       - name: AI Code Review
         env:
+          # Required: API endpoint for the code review service
           API_ENDPOINT: ${{ secrets.AI_REVIEW_API_ENDPOINT }}
+          # Optional: API key for the AI provider (if not provided, server-side keys will be used)
+          # Recommended to set this if your API endpoint doesn't have server-side keys configured
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          # Optional: AI provider (defaults to 'openai' if not set)
+          # Use 'vercel-ai-gateway' to use Vercel AI Gateway
           AI_PROVIDER: ${{ secrets.AI_PROVIDER }}
+          # Optional: Specific model to use (uses provider default if not set)
           AI_MODEL: ${{ secrets.AI_MODEL }}
+          # Optional: Fallback models for Vercel AI Gateway (comma-separated list)
+          # Example: "openai/gpt-4,anthropic/claude-3-opus"
+          AI_FALLBACK_MODELS: ${{ secrets.AI_FALLBACK_MODELS }}
+          # Required: GitHub token for posting PR comments
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Get PR information
@@ -40,8 +50,10 @@ jobs:
           echo "Using provider: $AI_PROVIDER"
 
           # Prepare request payload
-          if [ -n "$AI_MODEL" ]; then
-            REQUEST_PAYLOAD=$(cat <<EOF
+          # Note: apiKey is optional - if not provided, the API will use server-side stored keys
+          # For GitHub Actions, it's recommended to provide the API key via secrets
+          # Build base payload
+          BASE_PAYLOAD=$(cat <<EOF
           {
             "messages": [
               {
@@ -50,28 +62,29 @@ jobs:
               }
             ],
             "provider": "$AI_PROVIDER",
-            "apiKey": "$AI_API_KEY",
-            "model": "$AI_MODEL",
             "stream": false
           }
           EOF
-            )
-          else
-            REQUEST_PAYLOAD=$(cat <<EOF
-          {
-            "messages": [
-              {
-                "role": "user",
-                "content": "Please review this pull request: $PR_URL"
-              }
-            ],
-            "provider": "$AI_PROVIDER",
-            "apiKey": "$AI_API_KEY",
-            "stream": false
-          }
-          EOF
-            )
+          )
+          
+          # Add apiKey if provided
+          if [ -n "$AI_API_KEY" ]; then
+            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg key "$AI_API_KEY" '. + {"apiKey": $key}')
           fi
+          
+          # Add model if provided
+          if [ -n "$AI_MODEL" ]; then
+            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg model "$AI_MODEL" '. + {"model": $model}')
+          fi
+          
+          # Add fallbackModels if provided (for Vercel AI Gateway)
+          if [ -n "$AI_FALLBACK_MODELS" ]; then
+            # Convert comma-separated string to JSON array
+            FALLBACK_ARRAY=$(echo "$AI_FALLBACK_MODELS" | jq -R -s -c 'split(",") | map(select(length > 0) | gsub("^\\s+|\\s+$"; ""))')
+            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --argjson fallbacks "$FALLBACK_ARRAY" '. + {"fallbackModels": $fallbacks}')
+          fi
+          
+          REQUEST_PAYLOAD="$BASE_PAYLOAD"
 
           # Call the AI code review API (non-streaming)
           echo "Calling API endpoint: $API_ENDPOINT"

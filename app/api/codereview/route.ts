@@ -110,6 +110,7 @@ export async function POST(req: Request) {
       stream = true, // Default to streaming
       systemPrompt, // Custom system prompt
       contextFile, // Optional context file with name, content, and hash
+      fallbackModels, // Optional fallback models for Vercel AI Gateway
       // Note: The hash field enables future caching. If the context file hash hasn't changed,
       // you could cache embeddings or processed context to avoid reprocessing the same content.
       // Cache key could be: `context-${contextFile.hash}` or similar.
@@ -125,6 +126,7 @@ export async function POST(req: Request) {
         content: string;
         hash: string; // SHA-256 hash of file content for cache invalidation
       };
+      fallbackModels?: string[]; // Array of fallback model IDs for Vercel AI Gateway
     } = await req.json();
 
     // Build enhanced system prompt with context file if provided
@@ -153,6 +155,7 @@ You will be given a file path and you will review the code in that file.`;
       enableStepLogging: true, // Log tool calls for debugging
       logPrefix: 'CodeReview',
       contextFileHash: contextFile?.hash, // Pass hash for provider-level caching
+      fallbackModels, // Pass fallback models for Vercel AI Gateway
       // Note: When contextFile.hash is unchanged and user query is identical,
       // OpenAI will automatically return cached responses (faster + cheaper).
       // The hash helps track when context changes and cache should be invalidated.

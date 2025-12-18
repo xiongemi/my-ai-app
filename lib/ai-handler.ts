@@ -25,6 +25,7 @@ export interface AIHandlerOptions {
   logPrefix?: string; // Prefix for log messages
   enableStepLogging?: boolean; // Whether to log tool calls and results
   contextFileHash?: string; // Hash of context file for cache key generation
+  fallbackModels?: string[]; // Fallback models for Vercel AI Gateway (providerOptions.gateway.models)
 }
 
 export async function handleAIRequest(options: AIHandlerOptions) {
@@ -41,6 +42,7 @@ export async function handleAIRequest(options: AIHandlerOptions) {
     logPrefix = 'AI',
     enableStepLogging = false,
     contextFileHash,
+    fallbackModels,
   } = options;
 
   // Check credits
@@ -194,6 +196,16 @@ export async function handleAIRequest(options: AIHandlerOptions) {
       ...(tools && { tools }),
       messages,
       ...(stopWhen && { stopWhen }),
+      // Add providerOptions for Vercel AI Gateway fallback models
+      ...(providerId === 'vercel-ai-gateway' &&
+        fallbackModels &&
+        fallbackModels.length > 0 && {
+          providerOptions: {
+            gateway: {
+              models: fallbackModels,
+            },
+          },
+        }),
       onFinish: ({ usage, finishReason }) => {
         console.log(
           `[${logPrefix}] Stream finished. Reason: ${finishReason}, Tokens: ${usage.inputTokens}/${usage.outputTokens}`,
@@ -301,6 +313,16 @@ export async function handleAIRequest(options: AIHandlerOptions) {
         ...(tools && { tools }),
         messages,
         ...(stopWhen && { stopWhen }), // Include stopWhen for non-streaming too
+        // Add providerOptions for Vercel AI Gateway fallback models
+        ...(providerId === 'vercel-ai-gateway' &&
+          fallbackModels &&
+          fallbackModels.length > 0 && {
+            providerOptions: {
+              gateway: {
+                models: fallbackModels,
+              },
+            },
+          }),
       });
 
       // Log result for debugging
