@@ -4,6 +4,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createQwen } from 'qwen-ai-provider';
 import { createCohere } from '@ai-sdk/cohere';
+import { createGatewayProvider } from '@ai-sdk/gateway';
 import { getDefaultModel } from '@/lib/models';
 
 // Provider configurations - exported for reuse
@@ -37,11 +38,11 @@ export const providerConfigs = {
     defaultModel: getDefaultModel('cohere'),
   },
   'vercel-ai-gateway': {
-    createProvider: (apiKey: string) =>
-      createOpenAI({
-        apiKey,
-        baseURL: 'https://ai-gateway.vercel.sh/v1',
-      }),
+    // Vercel AI Gateway provider - uses @ai-sdk/gateway
+    // Models must be specified in format: "provider/model" (e.g., "openai/gpt-4", "anthropic/claude-3-opus")
+    // The gateway provider handles the endpoint URL internally - do not specify baseURL
+    // See: https://vercel.com/docs/ai-gateway
+    createProvider: (apiKey: string) => createGatewayProvider({ apiKey }),
     defaultModel: getDefaultModel('vercel-ai-gateway'),
   },
 };

@@ -9,6 +9,7 @@ import {
   Sparkles,
   FileText,
   Upload,
+  Square,
 } from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
@@ -108,6 +109,7 @@ export default function Home() {
     isLoading,
     messages,
     handleSubmit,
+    handleStop,
     error,
     clearError,
   } = useAIChat({
@@ -264,18 +266,30 @@ export default function Home() {
             }
             onChange={(e) => setInputValue(e.target.value)}
           />
-          <button
-            type="submit"
-            disabled={isLoading || !inputValue.trim()}
-            className="flex h-12 w-fit items-center justify-center gap-2 rounded-md bg-blue-600 px-6 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {inputMode === 'file' ? (
-              <Code size={16} />
-            ) : (
-              <GitPullRequest size={16} />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={isLoading || !inputValue.trim()}
+              className="flex h-12 w-fit items-center justify-center gap-2 rounded-md bg-blue-600 px-6 text-white transition-colors hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {inputMode === 'file' ? (
+                <Code size={16} />
+              ) : (
+                <GitPullRequest size={16} />
+              )}
+              {isLoading ? 'Reviewing...' : 'Review Code'}
+            </button>
+            {isLoading && (
+              <button
+                type="button"
+                onClick={handleStop}
+                className="flex h-12 w-fit items-center justify-center gap-2 rounded-md bg-red-600 px-6 text-white transition-colors hover:bg-red-700"
+              >
+                <Square size={16} />
+                Stop
+              </button>
             )}
-            {isLoading ? 'Reviewing...' : 'Review Code'}
-          </button>
+          </div>
         </div>
       </form>
 

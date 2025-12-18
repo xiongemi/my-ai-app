@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { MessageCircle, Send, Sparkles, AlertCircle, X } from 'lucide-react';
+import { MessageCircle, Send, Sparkles, AlertCircle, X, Square } from 'lucide-react';
 import { AISettingsPanel, providers } from '@/components/AISettingsPanel';
 import { useAIChat } from '@/hooks/useAIChat';
 import { MarkdownRenderer } from '@/components/MarkdownRenderer';
@@ -37,6 +37,7 @@ export default function ChatPage() {
     isLoading,
     messages,
     handleSubmit,
+    handleStop,
     error,
     clearError,
   } = useAIChat({
@@ -130,6 +131,16 @@ export default function ChatPage() {
               <Send size={16} />
               {isLoading ? '...' : 'Send'}
             </button>
+            {isLoading && (
+              <button
+                type="button"
+                onClick={handleStop}
+                className="flex h-10 items-center justify-center gap-2 rounded-md bg-red-600 px-4 text-white transition-colors hover:bg-red-700"
+              >
+                <Square size={16} />
+                Stop
+              </button>
+            )}
           </div>
         </div>
       </form>
