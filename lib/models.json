@@ -116,27 +116,42 @@
     ]
   },
   "cohere": {
-    "defaultModel": "command-r-plus",
+    "defaultModel": "command-r7b-12-2024",
     "models": [
       {
-        "id": "command-r-plus",
+        "id": "command-a-03-2025",
+        "name": "Command A",
+        "description": "Most performant model, excels at tool use, agents, RAG, and multilingual (256K context)"
+      },
+      {
+        "id": "command-r-plus-08-2024",
         "name": "Command R+",
-        "description": "Most capable model"
+        "description": "Best suited for complex RAG workflows and multi-step tool use (128K context)"
       },
       {
-        "id": "command-r",
+        "id": "command-r-08-2024",
         "name": "Command R",
-        "description": "Balanced performance"
+        "description": "Instruction-following conversational model for complex workflows (128K context)"
       },
       {
-        "id": "command",
-        "name": "Command",
-        "description": "Fast and efficient"
+        "id": "command-r7b-12-2024",
+        "name": "Command R7B",
+        "description": "Small, fast model for RAG, tool use, and agents (128K context)"
       },
       {
-        "id": "command-light",
-        "name": "Command Light",
-        "description": "Lightweight model"
+        "id": "command-a-reasoning-08-2025",
+        "name": "Command A Reasoning",
+        "description": "Reasoning model for nuanced problem-solving and agent-based tasks (256K context)"
+      },
+      {
+        "id": "command-a-vision-07-2025",
+        "name": "Command A Vision",
+        "description": "Multimodal model for analyzing charts, graphs, diagrams, OCR, and document Q&A (128K context)"
+      },
+      {
+        "id": "command-a-translate-08-2025",
+        "name": "Command A Translate",
+        "description": "State-of-the-art machine translation model for 23 languages (8K context)"
       }
     ]
   },

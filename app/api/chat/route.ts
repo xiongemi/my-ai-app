@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       tools: enableTools ? codeTools : undefined,
       // Allow up to 10 steps for chat (less than codereview since it's simpler)
       stopWhen: enableTools ? stepCountIs(10) : undefined,
-      enableUsageMetadata: false,
+      enableUsageMetadata: true, // Include usage in streaming response for UI display
       logPrefix: 'Chat',
     });
   } catch (error) {

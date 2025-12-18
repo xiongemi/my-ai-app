@@ -105,6 +105,8 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
       setStreamingErrorState(error);
     },
     onFinish: () => {
+      // Check if the last message has usage metadata
+      // The usage should be attached via messageMetadata in toUIMessageStreamResponse
       refetchBilling();
     },
   });
@@ -119,6 +121,25 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
 
   const isStreamingLoading = status === 'streaming' || status === 'submitted';
   const isLoading = useStreaming ? isStreamingLoading : isNonStreamingLoading;
+
+  // Debug: Check if usage metadata is attached to streaming messages
+  useEffect(() => {
+    if (useStreaming && streamingMessages.length > 0) {
+      const lastMessage = streamingMessages[streamingMessages.length - 1];
+      if (lastMessage.role === 'assistant' && 'usage' in lastMessage) {
+        console.log('[Frontend Streaming] Usage found in message:', {
+          messageId: lastMessage.id,
+          usage: (lastMessage as any).usage,
+        });
+      } else if (lastMessage.role === 'assistant') {
+        console.log('[Frontend Streaming] No usage found in message:', {
+          messageId: lastMessage.id,
+          hasUsage: 'usage' in lastMessage,
+          messageKeys: Object.keys(lastMessage),
+        });
+      }
+    }
+  }, [streamingMessages, useStreaming]);
 
   // Non-streaming submit handler
   const handleNonStreamingSubmit = useCallback(async () => {
@@ -159,16 +180,42 @@ export function useAIChat({ endpoint, extraBody }: UseAIChatOptions) {
         body: JSON.stringify(requestBody),
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        const text = await response.text();
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        throw new Error(
+          `Failed to parse response: ${response.status} ${response.statusText}`,
+        );
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+        throw new Error(
+          data.error ||
+            data.message ||
+            `HTTP error! status: ${response.status}`,
+        );
+      }
+
+      // Log response data for debugging
+      console.log('[Frontend Non-Streaming] Response data:', {
+        hasText: !!data.text,
+        textLength: data.text?.length ?? 0,
+        textPreview: data.text?.substring(0, 100) ?? 'N/A',
+        usage: data.usage,
+      });
+
+      if (!data.text || data.text.trim().length === 0) {
+        console.warn(
+          '[Frontend Non-Streaming] Warning: Empty or missing text in response',
+        );
       }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.text,
+        content: data.text || 'No response received from the model.',
         usage: data.usage,
       };
 

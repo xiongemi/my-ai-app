@@ -60,13 +60,82 @@ export async function handleAIRequest(options: AIHandlerOptions) {
   }
 
   // Convert messages to ModelMessage[] format
-  // Streaming sends UIMessage[] format, non-streaming sends {role, content} format
-  const messages = stream
-    ? convertToModelMessages(rawMessages as UIMessage[])
-    : (rawMessages as Array<{ role: string; content: string }>).map((m) => ({
+  // For streaming: rawMessages is UIMessage[] format
+  // For non-streaming: rawMessages is Array<{ role: string; content: string }> format
+  // Normalize to UIMessage[] format first, then convert to ModelMessage[]
+  let normalizedMessages: UIMessage[];
+  
+  if (stream) {
+    // Streaming mode already sends UIMessage[] format
+    normalizedMessages = rawMessages as UIMessage[];
+  } else {
+    // Non-streaming mode sends simple format, convert to UIMessage[] format
+    // UIMessage can have either 'content' (string) or 'parts' (array)
+    normalizedMessages = (rawMessages as Array<{ role: string; content: string }>).map(
+      (m) => ({
+        id: `msg-${Date.now()}-${Math.random()}`,
         role: m.role as 'user' | 'assistant' | 'system',
-        content: m.content,
-      }));
+        parts: [{ type: 'text' as const, text: m.content }],
+      }),
+    ) as unknown as UIMessage[];
+  }
+
+  let messages = convertToModelMessages(normalizedMessages);
+
+  // Cohere requires messages to have either content or tool calls
+  // Filter out messages that have neither (which shouldn't happen, but be safe)
+  if (providerId === 'cohere') {
+    messages = messages.filter((m, i) => {
+      // Check if content exists and is non-empty (handle string or array types)
+      const contentStr =
+        typeof m.content === 'string'
+          ? m.content
+          : Array.isArray(m.content)
+            ? m.content
+                .map((p: any) => (p.type === 'text' ? p.text : ''))
+                .join('')
+            : '';
+      const hasContent = !!contentStr && contentStr.trim().length > 0;
+      const hasToolCalls = !!(m as any).toolCalls?.length;
+      const hasToolResults = !!(m as any).toolResults?.length;
+      const isValid = hasContent || hasToolCalls || hasToolResults;
+
+      if (!isValid) {
+        console.warn(
+          `[${logPrefix}] Filtering out invalid message at index ${i}: no content, tool calls, or tool results`,
+        );
+      }
+
+      return isValid;
+    });
+
+    // Log messages for debugging
+    console.log(
+      `[${logPrefix}] Converted messages (${messages.length} valid):`,
+      JSON.stringify(
+        messages.map((m, i) => {
+          const contentStr =
+            typeof m.content === 'string'
+              ? m.content
+              : Array.isArray(m.content)
+                ? m.content
+                    .map((p: any) => (p.type === 'text' ? p.text : ''))
+                    .join('')
+                : '';
+          return {
+            index: i,
+            role: m.role,
+            hasContent: !!contentStr && contentStr.length > 0,
+            contentLength: contentStr.length,
+            hasToolCalls: !!(m as any).toolCalls?.length,
+            hasToolResults: !!(m as any).toolResults?.length,
+          };
+        }),
+        null,
+        2,
+      ),
+    );
+  }
 
   // Validate provider
   if (!providerConfigs[providerId]) {
@@ -171,34 +240,219 @@ export async function handleAIRequest(options: AIHandlerOptions) {
         console.log(
           `[${logPrefix}] Stream completed. Response message ID: ${responseMessage.id}`,
         );
+        // Log usage if available in the response message
+        if (enableUsageMetadata && (responseMessage as any).usage) {
+          console.log(
+            `[${logPrefix}] Usage attached to response message:`,
+            (responseMessage as any).usage,
+          );
+        }
       },
     });
   } else {
     // Non-streaming mode - better for usage tracking
-    const result = await generateText({
-      model,
-      system: systemPrompt,
-      ...(tools && { tools }),
-      messages,
-    });
+    try {
+      const result = await generateText({
+        model,
+        system: systemPrompt,
+        ...(tools && { tools }),
+        messages,
+        ...(stopWhen && { stopWhen }), // Include stopWhen for non-streaming too
+      });
 
-    // Accurate usage tracking - AI SDK v5 uses inputTokens/outputTokens
-    const promptTokens = result.usage.inputTokens ?? 0;
-    const completionTokens = result.usage.outputTokens ?? 0;
-    const billingResult = deductCredits(
-      modelName,
-      promptTokens,
-      completionTokens,
-    );
+      // Log result for debugging
+      console.log(
+        `[${logPrefix}] Non-streaming result:`,
+        JSON.stringify({
+          hasText: !!result.text,
+          textLength: result.text?.length ?? 0,
+          textPreview: result.text?.substring(0, 100) ?? 'N/A',
+          finishReason: result.finishReason,
+          stepsCount: (result as any).steps?.length ?? 0,
+          usage: result.usage,
+        }),
+      );
 
-    return NextResponse.json({
-      text: result.text,
-      usage: {
+      // Extract text from result - check both result.text and steps
+      let finalText = result.text || '';
+      
+      // If no text but we have steps, try to extract text from the last step
+      if (!finalText && (result as any).steps) {
+        const steps = (result as any).steps;
+        // Look for text in the last step's content
+        const lastStep = steps[steps.length - 1];
+        if (lastStep?.content) {
+          // Extract text parts from content array
+          const textParts = lastStep.content
+            .filter((part: any) => part.type === 'text')
+            .map((part: any) => part.text)
+            .join('');
+          if (textParts) {
+            finalText = textParts;
+            console.log(
+              `[${logPrefix}] Extracted text from steps: ${textParts.length} chars`,
+            );
+          }
+        }
+      }
+
+      // If still no text and finishReason is tool-calls, the model made tool calls but hasn't generated final response
+      if (!finalText && result.finishReason === 'tool-calls') {
+        console.warn(
+          `[${logPrefix}] Model made tool calls but no final text generated. This might indicate the model needs more steps.`,
+        );
+        finalText =
+          'The model processed your request and made tool calls, but the final response is not yet available. Please try using streaming mode for better tool call handling.';
+      }
+
+      // Accurate usage tracking - AI SDK v5 uses inputTokens/outputTokens
+      const promptTokens = result.usage.inputTokens ?? 0;
+      const completionTokens = result.usage.outputTokens ?? 0;
+      const billingResult = deductCredits(
+        modelName,
         promptTokens,
         completionTokens,
-        totalTokens: promptTokens + completionTokens,
-      },
-      billing: billingResult,
-    });
+      );
+
+      return NextResponse.json({
+        text: finalText,
+        usage: {
+          promptTokens,
+          completionTokens,
+          totalTokens: promptTokens + completionTokens,
+        },
+        billing: billingResult,
+      });
+    } catch (error: any) {
+      // Handle citation parsing errors where the API returns valid text but citations format doesn't match SDK expectations
+      // Some providers (like Cohere) return citations with tool_output instead of document field
+      // The error.value contains the raw API response with the actual text
+      // Error structure: AI_APICallError -> cause: [Error[AI_TypeValidationError]] -> value: {message, usage}
+      
+      // Log error structure for debugging
+      console.log(`[${logPrefix}] Caught error:`, {
+        errorName: error?.name,
+        errorMessage: error?.message?.substring(0, 100),
+        hasValue: !!error?.value,
+        hasMessage: !!error?.value?.message,
+        hasContent: !!error?.value?.message?.content,
+        contentIsArray: Array.isArray(error?.value?.message?.content),
+        hasCitations: !!error?.value?.message?.citations,
+        hasResponseBody: !!error?.responseBody,
+      });
+
+      // Try to get the response data from error.value or parse from responseBody
+      let responseData = error?.value;
+      if (!responseData?.message?.content && error?.responseBody) {
+        try {
+          responseData = JSON.parse(error.responseBody);
+          console.log(`[${logPrefix}] Parsed responseBody to get response data`);
+        } catch (e) {
+          console.warn(`[${logPrefix}] Failed to parse responseBody:`, e);
+        }
+      }
+
+      const hasValueWithMessage =
+        responseData?.message?.content &&
+        Array.isArray(responseData.message.content);
+
+      // If we have valid response data (error.value.message.content), extract the text
+      // This handles citation parsing errors where the API returns valid text but citations format doesn't match SDK expectations
+      if (hasValueWithMessage) {
+        console.log(
+          `[${logPrefix}] Error handler check:`,
+          JSON.stringify({
+            hasValueWithMessage,
+            hasInvalidJson: error?.message?.includes('Invalid JSON response'),
+            hasCitations: !!responseData?.message?.citations,
+            willExtract: true,
+          }),
+        );
+        console.log(
+          `[${logPrefix}] Detected citation error with valid response data - extracting text`,
+        );
+        console.warn(
+          `[${logPrefix}] Citation format mismatch detected, extracting text manually from response data`,
+        );
+
+        // Extract text from the API response format
+        const apiMessage = responseData.message;
+        let extractedText = '';
+
+        if (Array.isArray(apiMessage.content)) {
+          extractedText = apiMessage.content
+            .filter((part: any) => part.type === 'text')
+            .map((part: any) => part.text)
+            .join('');
+        }
+
+        if (extractedText) {
+          // Extract usage from response data if available
+          // Cohere uses: usage.tokens.input_tokens / usage.tokens.output_tokens
+          // Some providers use input_tokens/output_tokens format, others use inputTokens/outputTokens
+          const usage = responseData?.usage?.tokens || responseData?.usage;
+          const promptTokens =
+            usage?.input_tokens ??
+            usage?.inputTokens ??
+            responseData?.usage?.billed_units?.input_tokens ??
+            0;
+          const completionTokens =
+            usage?.output_tokens ??
+            usage?.outputTokens ??
+            responseData?.usage?.billed_units?.output_tokens ??
+            0;
+
+          console.log(
+            `[${logPrefix}] Extracted text from API response: ${extractedText.length} chars, tokens: ${promptTokens}/${completionTokens}`,
+          );
+
+          const billingResult = deductCredits(
+            modelName,
+            promptTokens,
+            completionTokens,
+          );
+
+          return NextResponse.json({
+            text: extractedText,
+            usage: {
+              promptTokens,
+              completionTokens,
+              totalTokens: promptTokens + completionTokens,
+            },
+            billing: billingResult,
+          });
+        } else {
+          console.warn(
+            `[${logPrefix}] Failed to extract text from error.value.message.content`,
+            {
+              contentLength: apiMessage.content?.length ?? 0,
+              contentTypes: apiMessage.content?.map((p: any) => p?.type),
+            },
+          );
+        }
+      }
+
+      console.error(`[${logPrefix}] Error in generateText:`, error);
+      // Log the error structure for debugging
+      if (error?.value) {
+        console.error(
+          `[${logPrefix}] Error value structure:`,
+          JSON.stringify(
+            {
+              hasMessage: !!error.value.message,
+              hasContent: !!error.value.message?.content,
+              hasUsage: !!error.value.usage,
+              errorName: error.name,
+              errorMessage: error.message,
+              causeCount: error.cause?.length ?? 0,
+              causeTypes: error.cause?.map((c: any) => c?.name || c?.code),
+            },
+            null,
+            2,
+          ),
+        );
+      }
+      throw error;
+    }
   }
 }
