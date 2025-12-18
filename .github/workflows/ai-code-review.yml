@@ -34,8 +34,8 @@ jobs:
           # Optional: Fallback models for Vercel AI Gateway (comma-separated list)
           # Example: "openai/gpt-4,anthropic/claude-3-opus"
           AI_FALLBACK_MODELS: ${{ secrets.AI_FALLBACK_MODELS }}
-          # Required: GitHub token for posting PR comments
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN is automatically provided by GitHub Actions - no need to set it as a secret
+          # It's available as ${{ secrets.GITHUB_TOKEN }} or via the GITHUB_TOKEN environment variable
         run: |
           # Get PR information
           PR_URL="${{ github.event.pull_request.html_url }}"
@@ -84,47 +84,72 @@ jobs:
             BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --argjson fallbacks "$FALLBACK_ARRAY" '. + {"fallbackModels": $fallbacks}')
           fi
           
+          # Add GitHub token and PR URL for automatic comment posting
+          # GITHUB_TOKEN is automatically provided by GitHub Actions
+          GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          if [ -n "$GITHUB_TOKEN" ]; then
+            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg token "$GITHUB_TOKEN" '. + {"githubToken": $token}')
+            BASE_PAYLOAD=$(echo "$BASE_PAYLOAD" | jq --arg url "$PR_URL" '. + {"prUrl": $url}')
+          fi
+          
           REQUEST_PAYLOAD="$BASE_PAYLOAD"
 
           # Call the AI code review API (non-streaming)
           echo "Calling API endpoint: $API_ENDPOINT"
-          REVIEW_RESPONSE=$(curl -s -X POST "$API_ENDPOINT" \
+          echo "Request payload: $(echo "$REQUEST_PAYLOAD" | jq -c .)"
+          
+          # Use curl with better error handling
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" -X POST "$API_ENDPOINT" \
             -H "Content-Type: application/json" \
             -d "$REQUEST_PAYLOAD")
-
-          # Extract the review text from the response
-          # The API returns { text: "...", usage: {...} } for non-streaming
-          REVIEW_TEXT=$(echo "$REVIEW_RESPONSE" | jq -r '.text // empty')
-
-          if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" = "null" ]; then
-            echo "Error: No review content received"
+          
+          REVIEW_RESPONSE=$(cat /tmp/response.json)
+          
+          echo "HTTP Status Code: $HTTP_CODE"
+          echo "Response (first 500 chars): ${REVIEW_RESPONSE:0:500}"
+          
+          # Check HTTP status code
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "Error: API returned HTTP $HTTP_CODE"
+            echo "Full response: $REVIEW_RESPONSE"
+            exit 1
+          fi
+          
+          # Check if response is empty
+          if [ -z "$REVIEW_RESPONSE" ]; then
+            echo "Error: Empty response from API"
+            exit 1
+          fi
+          
+          # Check if response is valid JSON
+          if ! echo "$REVIEW_RESPONSE" | jq . > /dev/null 2>&1; then
+            echo "Error: Invalid JSON response from API"
             echo "Response: $REVIEW_RESPONSE"
             exit 1
           fi
-
-          # Get usage info if available
-          USAGE_INFO=""
-          if echo "$REVIEW_RESPONSE" | jq -e '.usage' > /dev/null 2>&1; then
-            PROMPT_TOKENS=$(echo "$REVIEW_RESPONSE" | jq -r '.usage.promptTokens // .usage.promptTokens // 0')
-            COMPLETION_TOKENS=$(echo "$REVIEW_RESPONSE" | jq -r '.usage.completionTokens // .usage.completionTokens // 0')
-            TOTAL_TOKENS=$(echo "$REVIEW_RESPONSE" | jq -r '.usage.totalTokens // .usage.totalTokens // 0')
-            if [ "$TOTAL_TOKENS" != "0" ]; then
-              USAGE_INFO="\n\n---\n**Usage:** $PROMPT_TOKENS prompt + $COMPLETION_TOKENS completion = $TOTAL_TOKENS tokens"
-            fi
+          
+          # Check if the API call returned an error
+          if echo "$REVIEW_RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
+            ERROR_MSG=$(echo "$REVIEW_RESPONSE" | jq -r '.error')
+            echo "Error from API: $ERROR_MSG"
+            exit 1
+          fi
+          
+          # Extract the review text from the response
+          # The API returns { text: "...", usage: {...} } for non-streaming
+          REVIEW_TEXT=$(echo "$REVIEW_RESPONSE" | jq -r '.text // empty')
+          
+          if [ -z "$REVIEW_TEXT" ] || [ "$REVIEW_TEXT" = "null" ]; then
+            echo "Error: No review content received"
+            echo "Full response: $REVIEW_RESPONSE"
+            echo "Response structure: $(echo "$REVIEW_RESPONSE" | jq 'keys')"
+            exit 1
           fi
 
-          # Post review as PR comment
-          COMMENT_BODY=$(cat <<EOF
-          ## 🤖 AI Code Review
-
-          $REVIEW_TEXT$USAGE_INFO
-          EOF
-          )
-
-          curl -X POST \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/$REPO_OWNER/$REPO_NAME/issues/$PR_NUMBER/comments" \
-            -d "{\"body\": $(echo "$COMMENT_BODY" | jq -Rs .)}"
-
-          echo "Review posted successfully!"
+          # If githubToken was provided, the API automatically posted the comment
+          # Otherwise, we would need to post it manually here (but that's not needed anymore)
+          if [ -n "$GITHUB_TOKEN" ]; then
+            echo "Review completed! Comment should be automatically posted to PR #$PR_NUMBER"
+          else
+            echo "Review completed! (No GitHub token provided, comment not posted)"
+          fi

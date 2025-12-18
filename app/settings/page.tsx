@@ -30,6 +30,7 @@ export default function SettingsPage() {
   const [providers, setProviders] = useState<ApiKeyConfig[]>(defaultProviders);
   const [visibleKeys, setVisibleKeys] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
+  const [githubToken, setGithubToken] = useState('');
 
   useEffect(() => {
     // Load saved keys from localStorage
@@ -43,6 +44,10 @@ export default function SettingsPage() {
             key: parsed[p.id] || '',
           })),
         );
+        // Load GitHub token if present
+        if (parsed.githubToken) {
+          setGithubToken(parsed.githubToken);
+        }
       } catch (e) {
         console.error('Failed to parse saved keys', e);
       }
@@ -61,10 +66,14 @@ export default function SettingsPage() {
   };
 
   const handleSave = () => {
-    const keysToSave = providers.reduce(
+    const keysToSave: Record<string, string> = providers.reduce(
       (acc, p) => ({ ...acc, [p.id]: p.key }),
-      {},
+      {} as Record<string, string>,
     );
+    // Include GitHub token in saved keys
+    if (githubToken) {
+      keysToSave.githubToken = githubToken;
+    }
     localStorage.setItem('ai-api-keys', JSON.stringify(keysToSave));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -144,6 +153,54 @@ export default function SettingsPage() {
             API keys are stored locally in your browser. They are never sent to
             our servers.
           </p>
+        </div>
+
+        <div className="flex flex-col gap-6">
+          <div className="flex items-center gap-2 text-zinc-800 dark:text-zinc-200">
+            <Sparkles size={20} />
+            <h2 className="text-xl font-medium">GitHub Integration</h2>
+          </div>
+
+          <div className="flex flex-col gap-2 p-4 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+            <label
+              htmlFor="github-token"
+              className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            >
+              GitHub Token
+            </label>
+            <p className="text-xs text-zinc-500 dark:text-zinc-500 mb-2">
+              Required for GitHub Actions workflow to post PR comments. Create a
+              personal access token with{' '}
+              <code className="px-1 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded">
+                repo
+              </code>{' '}
+              scope.
+            </p>
+            <div className="relative flex items-center">
+              <input
+                id="github-token"
+                type={visibleKeys['github-token'] ? 'text' : 'password'}
+                value={githubToken}
+                onChange={(e) => {
+                  setGithubToken(e.target.value);
+                  setSaved(false);
+                }}
+                placeholder="ghp_..."
+                className="w-full px-3 py-2 pr-10 text-sm border border-zinc-300 dark:border-zinc-700 rounded-md bg-zinc-50 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <button
+                type="button"
+                onClick={() => toggleVisibility('github-token')}
+                className="absolute right-2 p-1 text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300"
+              >
+                {visibleKeys['github-token'] ? (
+                  <EyeOff size={18} />
+                ) : (
+                  <Eye size={18} />
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
