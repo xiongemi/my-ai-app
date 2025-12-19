@@ -4,13 +4,18 @@ A Next.js application that uses AI to review code files and GitHub pull requests
 
 ## Features
 
-- 🤖 **Multi-Provider AI Support**: Choose from OpenAI, Google Gemini, Anthropic Claude, DeepSeek, Qwen, and Vercel AI Gateway
+- 🤖 **Multi-Provider AI Support**: Choose from OpenAI, Google Gemini, Anthropic Claude, DeepSeek, Qwen, Cohere, and Vercel AI Gateway
 - 📝 **Code Review**: Review local files or GitHub pull requests
 - 💬 **Chat Interface**: General-purpose AI chat with optional file reading tools
-- 📊 **Usage Tracking**: Credit-based billing system with cost tracking
+- 🔄 **GitHub Actions Integration**: Automated PR reviews via GitHub Actions workflow
+- 📊 **Usage Tracking**: Real-time token usage display and cost tracking
+- 💰 **Billing Dashboard**: View total costs and token consumption
+- 🛑 **Stop Button**: Cancel requests mid-stream for better control
+- 📁 **Context Files**: Upload repository context files for better code understanding
+- 🔄 **Fallback Models**: Automatic fallback support for Vercel AI Gateway
 - 🌓 **Dark Mode**: Built-in theme switcher
 - 📱 **Responsive Design**: Works on desktop and mobile devices
-- ⚡ **Streaming Responses**: Real-time streaming for better UX
+- ⚡ **Streaming & Non-Streaming**: Choose between real-time streaming or complete responses
 - 🎨 **Markdown Rendering**: Beautiful markdown rendering for AI responses
 - 🧪 **Testing**: Jest test suite included
 
@@ -80,21 +85,33 @@ pnpm dev
 3. Choose input mode:
    - **File Path**: Enter a local file path to review
    - **PR Link**: Enter a GitHub PR URL (e.g., `https://github.com/owner/repo/pull/123`)
-4. Optionally customize the system prompt
+4. Optionally:
+   - Customize the system prompt
+   - Upload a repository context file (e.g., README, architecture docs)
+   - Configure fallback models (for Vercel AI Gateway)
 5. Click "Review Code" to start the review
+6. Use the "Stop" button to cancel a request if needed
+7. View token usage for each review in the response
 
 ### Chat
 
 1. Navigate to `/chat`
 2. Select your AI provider and model
-3. Optionally enable file reading tools
+3. Optionally:
+   - Customize the system prompt
+   - Enable file reading tools
+   - Configure fallback models (for Vercel AI Gateway)
 4. Start chatting with the AI
+5. Use the "Stop" button to cancel a request if needed
+6. View token usage for each message in the conversation
 
 ### Settings
 
 1. Navigate to `/settings`
 2. Add or update API keys for different providers
-3. Keys are stored in localStorage
+3. Optionally add a GitHub token (for future private repository support)
+4. Keys are stored securely in localStorage
+5. View billing information (total cost and tokens consumed)
 
 ## Project Structure
 
@@ -110,8 +127,10 @@ my-ai-app/
 │   └── page.tsx           # Code review page (home)
 ├── components/
 │   ├── AISettingsPanel.tsx    # AI provider/model selector
-│   ├── MarkdownRenderer.tsx   # Markdown to HTML renderer
-│   └── ThemeSwitcher.tsx      # Dark mode toggle
+│   ├── Billing.tsx             # Billing context and provider
+│   ├── MarkdownRenderer.tsx    # Markdown to HTML renderer
+│   ├── ThemeSwitcher.tsx       # Dark mode toggle
+│   └── VercelGatewayFallbackModels.tsx  # Fallback models hook
 ├── hooks/
 │   └── useAIChat.ts           # Custom hook for AI chat
 ├── lib/
@@ -137,7 +156,13 @@ Code review endpoint with file reading and PR reading tools.
   "model": "gpt-4",
   "apiKey": "optional-api-key",
   "stream": true,
-  "systemPrompt": "Custom system prompt"
+  "systemPrompt": "Custom system prompt",
+  "contextFile": {
+    "name": "README.md",
+    "content": "...",
+    "hash": "sha256-hash"
+  },
+  "fallbackModels": ["deepseek/deepseek-coder", "qwen/qwen-turbo"]
 }
 ```
 
@@ -155,13 +180,24 @@ General chat endpoint with optional file reading tools.
   "apiKey": "optional-api-key",
   "stream": true,
   "systemPrompt": "Custom system prompt",
-  "enableTools": false
+  "enableTools": false,
+  "fallbackModels": ["deepseek/deepseek-coder", "qwen/qwen-turbo"]
 }
 ```
 
 ### `/api/billing`
 
-Get current credit balance and usage history.
+Get current billing information including total cost and total tokens consumed.
+
+**Response:**
+
+```json
+{
+  "totalCost": 0.123,
+  "totalTokens": 12345,
+  "usageHistory": [...]
+}
+```
 
 ## Available Scripts
 
@@ -200,7 +236,8 @@ See [`lib/models.json`](./lib/models.json) for the complete list of supported mo
 | Anthropic         | Requires API key         |
 | DeepSeek          | Requires API key         |
 | Qwen              | Requires API key         |
-| Vercel AI Gateway | Requires gateway API key |
+| Cohere            | Requires API key         |
+| Vercel AI Gateway | Requires gateway API key, supports fallback models |
 
 ## Features in Detail
 
@@ -211,10 +248,34 @@ See [`lib/models.json`](./lib/models.json) for the complete list of supported mo
 
 ### Billing System
 
-- Credit-based system
-- Tracks usage per model
-- Cost calculation based on input/output tokens
-- Usage history tracking
+- Real-time token usage tracking (prompt tokens, completion tokens, total tokens)
+- Cost calculation based on provider-specific pricing
+- Total cost and total tokens displayed in settings panel
+- Usage history tracking per request
+- Automatic billing updates after each AI interaction
+
+### GitHub Actions Integration
+
+Automated code reviews for pull requests using GitHub Actions.
+
+**Setup:**
+
+1. Deploy your app to a publicly accessible URL (e.g., Vercel)
+2. Configure GitHub Secrets:
+   - `AI_REVIEW_API_ENDPOINT`: Your deployed API endpoint URL
+   - `AI_API_KEY`: Your AI provider API key
+   - `AI_PROVIDER`: (Optional) Provider name (default: `openai`)
+   - `AI_MODEL`: (Optional) Model name
+
+**Features:**
+
+- Automatically triggers on PR events (opened, reopened, synchronize, etc.)
+- Posts review comments directly to PRs
+- Updates existing bot comments to avoid duplicates
+- Supports streaming and non-streaming modes
+- Includes token usage in comments
+
+See [`.github/workflows/ai-code-review.yml`](.github/workflows/ai-code-review.yml) for the workflow configuration.
 
 ### Markdown Rendering
 
@@ -222,6 +283,13 @@ See [`lib/models.json`](./lib/models.json) for the complete list of supported mo
 - Syntax highlighting ready
 - Dark mode compatible
 - Compact spacing for readability
+
+### Error Handling
+
+- Input field preserved on API errors for easy retry
+- Clear error messages with troubleshooting tips
+- Graceful handling of network errors and API failures
+- Stop button to cancel requests mid-stream
 
 ## Environment Variables
 
@@ -232,7 +300,10 @@ All API keys can be set via environment variables or through the Settings page:
 - `ANTHROPIC_API_KEY`
 - `DEEPSEEK_API_KEY`
 - `QWEN_API_KEY`
+- `COHERE_API_KEY`
 - `VERCEL_AI_GATEWAY_API_KEY`
+
+**Note:** API keys set in the Settings page take precedence over environment variables and are stored in localStorage.
 
 ## Contributing
 
@@ -245,6 +316,18 @@ All API keys can be set via environment variables or through the Settings page:
 ## License
 
 [Add your license here]
+
+## Blog Post
+
+Learn more about building AI agents and the technical details behind this project:
+
+📖 **[Create an AI Agent with Vercel AI SDK](https://medium.com/@emilyxiong/create-an-ai-agent-with-vercel-ai-sdk-e690b807eb2a)**
+
+The blog post covers:
+- What is an AI Agent vs a ChatGPT wrapper
+- Tech stack deep dive
+- Cost analysis: Self-hosted vs commercial tools
+- Real-world usage scenarios
 
 ## Acknowledgments
 
