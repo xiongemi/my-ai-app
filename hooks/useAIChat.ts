@@ -107,6 +107,9 @@ export function useAIChat({
     });
   }, [endpoint, selectedProvider, selectedModel, apiKeys, extraBody]);
 
+  // Store input value before clearing for error recovery
+  const inputValueBeforeSubmitRef = useRef<string>('');
+
   const {
     messages: streamingMessages,
     status,
@@ -119,6 +122,11 @@ export function useAIChat({
     onError: (error) => {
       console.error('Streaming error:', error);
       setStreamingErrorState(error);
+      // Restore input value on error so user can retry
+      if (inputValueBeforeSubmitRef.current) {
+        setInputValue(inputValueBeforeSubmitRef.current);
+        inputValueBeforeSubmitRef.current = '';
+      }
     },
     onFinish: ({ message }) => {
       // Try to extract usage from message metadata if available
@@ -139,6 +147,8 @@ export function useAIChat({
       if (onFinishCallback) {
         onFinishCallback(message);
       }
+      // Clear the stored input value reference on successful completion
+      inputValueBeforeSubmitRef.current = '';
     },
   });
 
@@ -202,7 +212,7 @@ export function useAIChat({
     };
 
     setNonStreamingMessages((prev) => [...prev, userMessage]);
-    setInputValue('');
+    // Don't clear input yet - wait for successful response
     setIsNonStreamingLoading(true);
     setNonStreamingError(null);
 
@@ -275,15 +285,20 @@ export function useAIChat({
 
       setNonStreamingMessages((prev) => [...prev, assistantMessage]);
       refetchBilling();
+      // Only clear input on successful response
+      setInputValue('');
     } catch (error) {
       // Don't set error if request was aborted
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('Request aborted by user');
+        // Clear input if user aborted
+        setInputValue('');
       } else {
         console.error('Error:', error);
         setNonStreamingError(
           error instanceof Error ? error : new Error(String(error)),
         );
+        // Don't clear input on error - let user retry or fix their input
       }
     } finally {
       setIsNonStreamingLoading(false);
@@ -310,8 +325,12 @@ export function useAIChat({
       if (useStreaming) {
         // Clear previous errors before sending new message
         setStreamingErrorState(null);
+        // Store input value before clearing (for error recovery)
+        inputValueBeforeSubmitRef.current = inputValue;
         // Use sendMessage with text format (AI SDK 5 style)
         await sendMessage({ text: inputValue });
+        // Only clear input if sendMessage succeeds (no error thrown)
+        // If error occurs, onError will restore it
         setInputValue('');
       } else {
         await handleNonStreamingSubmit();
